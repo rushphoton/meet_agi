@@ -512,12 +512,19 @@ export interface components {
         Health: {
             /** Dev Mode */
             dev_mode: boolean;
+            /** Last Webhook At */
+            last_webhook_at?: string | null;
             /** Offline */
             offline: boolean;
             /** Ok */
             ok: boolean;
             /** Placeholders */
             placeholders: string[];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
         };
         /** MeetingEnded */
         MeetingEnded: {

@@ -74,3 +74,14 @@ def test_dev_endpoints_are_off_without_dev_mode(make_client):
 def test_health_lists_what_is_still_placeholder(client):
     health = client.get("/api/health").json()
     assert health["ok"] is True and any("engine" in p for p in health["placeholders"])
+
+
+def test_health_shows_live_vendor_failures_not_just_placeholders(make_client):
+    # Review B item 1/8: health stayed green while every Claude call failed.
+    with make_client() as client:
+        rt = client.app.state.runtime
+        assert client.get("/api/health").json()["warnings"] == []
+        rt.warnings["engine.judge"] = "Claude judge failing: credit balance too low"
+        health = client.get("/api/health").json()
+        assert health["warnings"] == ["Claude judge failing: credit balance too low"]
+        assert health["last_webhook_at"] is None
