@@ -16,7 +16,8 @@ Its rules (deliberately simple, deliberately visible):
   about a business metric ("revenue", "bookings", ...) is worth a look.
 - judge: only one scripted dispute is recognised - someone saying Q3 revenue
   was rising/up/grew. Everything else is "no issue".
-- answer: reads back the best-matching document passage.
+- answer: reads back the one document line sharing most words with the
+  question (or says it couldn't find it).
 - summary: topics from the alerts; follow-ups from "I'll ..." and
   "..., please ..." sentences; an alert counts as settled if someone later
   says "my mistake", "you're right" or "fair enough".

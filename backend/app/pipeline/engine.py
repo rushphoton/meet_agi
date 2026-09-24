@@ -40,6 +40,7 @@ from ..contract.events import (
 )
 from ..core.ids import new_id
 from ..knowledge import KnowledgeBase, Passage
+from ..knowledge.index import tokenize
 from ..providers.llm.base import AnswerDraft, LLMError, LLMProvider
 from .gate import check_gate
 from .phrases import detect_stop, detect_wake
@@ -239,7 +240,8 @@ class Engine:
             draft = await self.provider.answer(s.models.answer, question, asked_by, passages, s.answer_max_words)
         except LLMError as exc:
             log.warning("Answer model failed (%s); saying so instead", exc)
-            draft = AnswerDraft(spoken=ANSWER_FAILED, chat_line=f"I couldn't look that up just now ({exc}).",
+            # The vendor's error text goes to the log only, never into the meeting chat.
+            draft = AnswerDraft(spoken=ANSWER_FAILED, chat_line="I couldn't look that up just now.",
                                 passage_indexes=[], model="none")
         await self._publish_answer(ctx, question, asked_by, draft, passages, post_chat=True)
 
@@ -292,6 +294,10 @@ class Engine:
             return
         if not cheap.worth_a_look or cheap.score < s.gate.cheap_threshold:
             return
+        if self._continues_recent_alert(st, cheap.topic, segment.t_end, s.gate.cooldown_seconds):
+            log.info("Cheap check flagged %r again inside the cooldown; same dispute, judge not called", cheap.topic)
+            return
+        log.info("Cheap check flagged %r (score %.2f, %s); asking the judge", cheap.topic, cheap.score, cheap.model)
         passages = self.knowledge.search(query, ANSWER_PASSAGES)
         try:
             verdict = await self.provider.judge(s.models.judge, lines, passages, st.flagged_topics)
@@ -330,6 +336,16 @@ class Engine:
         await ctx.bus.publish(ctx.meeting_id, "chat.post", ChatPost(
             chat_id=new_id("chat"), reason="alert", ref_id=alert_id,
             status="suppressed_muted" if muted else "pending", text=f"{head}{body}{tail}"))
+
+    @staticmethod
+    def _continues_recent_alert(st: _MeetingState, topic: str, now_t: float, cooldown: int) -> bool:
+        """True when a flagged sentence is the room still talking about the dispute just alerted
+        (e.g. "I'm not sure that's right" right after the claim): sharing two or more content
+        words with an alerted topic, inside the cooldown. Saves a judge call and a noise alert."""
+        if st.last_alert_t is None or now_t - st.last_alert_t >= cooldown:
+            return False
+        words = set(tokenize(topic))
+        return any(len(words & set(tokenize(t))) >= 2 for t in st.flagged_topics)
 
     # ================= meeting end =================
     async def _summarize(self, ctx: MeetingContext, st: _MeetingState) -> None:

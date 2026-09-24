@@ -50,6 +50,20 @@ def test_answer_model_failure_says_so_out_loud_instead_of_going_silent(tmp_path)
     run(go())
 
 
+def test_vendor_error_text_never_reaches_the_meeting_chat(tmp_path):
+    """Bug found in the first live run (24 Sep): with no Anthropic credit, the chat got
+    'Because you asked: I couldn't look that up just now (HTTP 400: {"type":"error",...})'."""
+    async def go():
+        vendor_error = 'HTTP 400: {"type":"error","error":{"message":"Your credit balance is too low"}}'
+        h = Harness(tmp_path, Scripted(answer_error=LLMError(vendor_error)))
+        await h.say("Tom Walsh", QUESTION)
+        await h.settle()
+        [chat] = chats(h, "answer")
+        assert chat.text == "Because you asked: I couldn't look that up just now."
+        assert "HTTP" not in h.record.answers[0].text
+    run(go())
+
+
 def test_summary_model_failure_still_ends_the_meeting_with_a_summary_that_says_so(tmp_path):
     async def go():
         h = Harness(tmp_path, Scripted(cheap=flag_when("revenue"), verdict=verdict(),
@@ -113,6 +127,25 @@ def test_second_dispute_inside_the_cooldown_is_gated_and_after_it_posts(tmp_path
         assert [a.gated for a in alerts(h)] == [False, True, False]
         assert "cooldown" in alerts(h)[1].gate_reason
         assert len(chats(h, "alert")) == 2
+    run(go())
+
+
+def test_room_still_arguing_the_same_point_does_not_pay_for_the_judge_again(tmp_path):
+    """Seen in the first live run: Gemini flagged the claim AND the three sentences after it
+    ('I'm not sure that's right', ...) as 'Q3 revenue trend'. One alert is enough."""
+    async def go():
+        def cheap(lines):
+            from backend.app.providers.llm.base import CheapCheck
+            return CheapCheck(True, 0.95, "Q3 revenue trend vs Q2", "cheap-model")
+        h = Harness(tmp_path, Scripted(cheap=cheap, verdict=verdict()))
+        await h.say("Marcus Chen", DISPUTE, at=48)
+        await h.say("Priya Nair", "Hmm, I'm not sure that's right, I remember it being lower.", at=58)
+        await h.say("Tom Walsh", "Let's not get stuck on it, we can check after.", at=64)
+        await h.settle()
+        assert len(alerts(h)) == 1 and h.provider.calls["judge"] == 1 and h.provider.calls["cheap"] == 3
+        await h.say("Dana Lee", "Q3 revenue was up, I promise.", at=200)   # after the cooldown: judged again
+        await h.settle()
+        assert h.provider.calls["judge"] == 2
     run(go())
 
 

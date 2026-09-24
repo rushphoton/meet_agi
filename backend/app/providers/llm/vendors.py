@@ -71,9 +71,7 @@ class VendorClient:
             self._client = None
             raise LLMError(f"client error: {exc}") from exc
         if r.status_code != 200:
-            # The body can echo request details; keep only a short, key-free snippet.
-            snippet = re.sub(r"[A-Za-z0-9_\-]{30,}", "[redacted]", r.text[:300])
-            raise LLMError(f"HTTP {r.status_code}: {snippet}")
+            raise LLMError(f"HTTP {r.status_code}: {_error_text(r)}")
         try:
             return r.json()
         except ValueError as exc:
@@ -125,6 +123,19 @@ class VendorClient:
             return parse_claude_tool(data, tool_name), m
 
         return await self._with_fallback(model, call)
+
+
+def _error_text(r: httpx.Response) -> str:
+    """The vendor's own error message if it sent one, else a short snippet. Long tokens are
+    blanked because an error body can echo request details (CLAUDE.md rule 9)."""
+    text = r.text[:300]
+    try:
+        err = r.json().get("error")
+        if isinstance(err, dict) and isinstance(err.get("message"), str):
+            text = err["message"][:300]
+    except (ValueError, AttributeError):
+        pass
+    return re.sub(r"[A-Za-z0-9_\-]{30,}", "[redacted]", text)
 
 
 def parse_gemini(data: dict) -> dict:

@@ -68,6 +68,15 @@ def test_vendor_error_does_not_leak_the_key_into_the_message(keys):
     assert FAKE_KEY not in str(err.value) and "401" in str(err.value)
 
 
+def test_vendor_error_message_is_readable_not_raw_json(keys):
+    def handler(request):
+        return httpx.Response(400, json={"type": "error", "error": {
+            "type": "invalid_request_error", "message": "Your credit balance is too low to access the Anthropic API."}})
+    with pytest.raises(LLMError) as err:
+        asyncio.run(provider_with(handler).judge("claude-haiku-4-5-20251001", LINES, PASSAGES, []))
+    assert str(err.value) == "HTTP 400: Your credit balance is too low to access the Anthropic API."
+
+
 def test_slow_vendor_raises_llm_error_instead_of_hanging(keys):
     def handler(request):
         raise httpx.ReadTimeout("slow", request=request)
