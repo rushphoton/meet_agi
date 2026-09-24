@@ -47,25 +47,29 @@ class CannedProvider:
     def __init__(self, reason: str = "canned provider") -> None:
         self.reason = reason
 
-    async def cheap_check(self, model, lines: list[TranscriptSegment], passages, already_flagged) -> CheapCheck:
-        text = lines[-1].text.lower() if lines else ""
-        hit = bool(_METRIC.search(text) and _DIRECTION.search(text))
-        return CheapCheck(worth_a_look=hit, score=0.9 if hit else 0.0,
-                          topic=(_METRIC.search(text).group(1) if hit else ""), model=MODEL, canned=True)
+    async def cheap_check(self, model, lines: list[TranscriptSegment], passages, already_flagged,
+                          new_lines: int = 1) -> CheapCheck:
+        for seg in reversed(lines[-max(1, new_lines):]):
+            text = seg.text.lower()
+            if _METRIC.search(text) and _DIRECTION.search(text):
+                return CheapCheck(worth_a_look=True, score=0.9, topic=_METRIC.search(text).group(1),
+                                  model=MODEL, canned=True)
+        return CheapCheck(worth_a_look=False, score=0.0, topic="", model=MODEL, canned=True)
 
     async def judge(self, model, lines: list[TranscriptSegment], passages: list[Passage],
-                    already_flagged) -> Verdict:
-        last = lines[-1] if lines else None
-        if last is None or not _Q3_UP.search(last.text.lower()):
+                    already_flagged, new_lines: int = 1) -> Verdict:
+        n = max(1, min(new_lines, len(lines)))
+        hits = [i for i in range(len(lines) - n, len(lines)) if _Q3_UP.search(lines[i].text.lower())]
+        if not hits or any(t.lower().startswith("q3 revenue") for t in already_flagged):
             return Verdict(is_issue=False, model=MODEL, canned=True)
-        if any(t.lower().startswith("q3 revenue") for t in already_flagged):
-            return Verdict(is_issue=False, model=MODEL, canned=True)
-        revenue = [i for i, p in enumerate(passages) if "q3 revenue" in p.text.lower()]
+        i = hits[-1]
+        claim = lines[i]
+        revenue = [j for j, p in enumerate(passages) if "q3 revenue" in p.text.lower()]
         return Verdict(
-            is_issue=True, kind="contradiction", topic="Q3 revenue was rising", claim=last.text,
-            said_by=[last.speaker_name], segment_indexes=[len(lines) - 1],
+            is_issue=True, kind="contradiction", topic="Q3 revenue was rising", claim=claim.text,
+            said_by=[claim.speaker_name], segment_indexes=[i],
             finding="the board deck says Q3 revenue fell 4% ($41.2M, down from $42.9M in Q2).",
-            reasoning=(f"CANNED REASONING (no model was called; {self.reason}). {last.speaker_name} said "
+            reasoning=(f"CANNED REASONING (no model was called; {self.reason}). {claim.speaker_name} said "
                        f"Q3 revenue was rising. The canned judge has one scripted rule: the sample board "
                        f"deck states Q3 revenue was $41.2M, down 4% from Q2, so a claim that it rose is "
                        f"a contradiction."),

@@ -1,8 +1,11 @@
 """
 WHY THIS EXISTS
-The real AI provider: Gemini Flash-Lite for the cheap check that runs on
-every sentence, Claude for the three careful jobs (dispute judgement, spoken
-answer, summary). This file holds the instructions (prompts) each model gets
+The real AI provider. By default Gemini Flash-Lite does the cheap check that
+runs on every sentence and Claude does the three careful jobs (dispute
+judgement, spoken answer, summary). Which vendor serves a job follows the
+model name in Settings: any "gemini-..." model goes to Gemini, anything else
+to Claude - so if one vendor is down (or out of credit) Ray can move jobs to
+the other from the settings screen, with no code change. This file holds the instructions (prompts) each model gets
 and turns each reply into the engine's result shapes, clamping anything out
 of range.
 
@@ -17,6 +20,8 @@ FAILURE IT PREVENTS
   every field is checked and clamped here.
 """
 from __future__ import annotations
+
+import json
 
 from ...contract.events import Alert, TranscriptSegment
 from ...knowledge import Passage
@@ -37,12 +42,19 @@ def _passages(passages: list[Passage]) -> str:
                        for i, p in enumerate(passages))
 
 
+def _new_note(lines: list, new_lines: int) -> str:
+    n = max(1, min(new_lines, len(lines)))
+    if n == 1:
+        return "the last line is the new one"
+    return f"the last {n} lines are new; earlier ones are context"
+
+
 def _flagged(topics: list[str]) -> str:
     return "; ".join(topics) if topics else "(none yet)"
 
 
 CHEAP_SYSTEM = """You watch a live business meeting transcript for ONE thing: a factual claim that is \
-disputed or doubtful. Flag the LAST line only if, in it, someone
+disputed or doubtful. Flag only if, in a NEW line (the transcript header says which lines are new), someone
 - states a fact or number that contradicts the document passages, or
 - disagrees with a fact someone else just stated, or
 - is unsure about a fact or number that the documents could settle.
@@ -50,9 +62,16 @@ Do NOT flag opinions, plans, small talk, questions to the assistant, or facts th
 Do NOT flag a dispute whose topic is already in the "already flagged" list.
 Reply with JSON only: {"worth_a_look": true|false, "score": 0.0-1.0, "topic": "<= 8 words"}"""
 
+CHEAP_SCHEMA = {
+    "type": "object",
+    "properties": {"worth_a_look": {"type": "boolean"}, "score": {"type": "number"},
+                   "topic": {"type": "string"}},
+    "required": ["worth_a_look", "score", "topic"],
+}
+
 JUDGE_SYSTEM = """You are the careful fact-checker for a live business meeting. You are shown recent \
 transcript lines (numbered) and passages from the company's own documents (numbered).
-Decide whether the LAST line contains a factual dispute worth interrupting the meeting for:
+Decide whether a NEW line (the transcript header says which lines are new) contains a factual dispute worth interrupting the meeting for:
 - "contradiction": a stated fact conflicts with the documents;
 - "disagreement": participants disagree about a fact;
 - "uncertainty": someone is unsure of a fact the documents answer.
@@ -149,17 +168,29 @@ class RealProvider:
     def __init__(self, client: VendorClient | None = None) -> None:
         self.client = client or VendorClient()
 
-    async def cheap_check(self, model, lines, passages, already_flagged) -> CheapCheck:
+    async def _structured(self, model: str, system: str, prompt: str, name: str, schema: dict,
+                          max_tokens: int) -> tuple[dict, str]:
+        """Route by model name: any "gemini-..." model goes to Gemini's JSON mode, anything else
+        to Claude's forced tool call. Same result either way, so Settings can move any job
+        between vendors with no code change (review B item 1)."""
+        if model.startswith("gemini-"):
+            fields = json.dumps(schema, separators=(",", ":"))
+            return await self.client.gemini_json(
+                model, f"{system}\nInstead of a tool, reply with JSON only: one object matching this "
+                       f"JSON schema: {fields}", prompt, max_tokens)
+        return await self.client.claude_tool(model, system, prompt, name, schema, max_tokens)
+
+    async def cheap_check(self, model, lines, passages, already_flagged, new_lines: int = 1) -> CheapCheck:
         prompt = (f"Document passages:\n{_passages(passages)}\n\nAlready flagged: {_flagged(already_flagged)}"
-                  f"\n\nTranscript (last line is the new one):\n{_lines(lines)}")
-        data, used = await self.client.gemini_json(model, CHEAP_SYSTEM, prompt)
+                  f"\n\nTranscript ({_new_note(lines, new_lines)}):\n{_lines(lines)}")
+        data, used = await self._structured(model, CHEAP_SYSTEM, prompt, "record_check", CHEAP_SCHEMA, 256)
         return CheapCheck(worth_a_look=bool(data.get("worth_a_look")), score=_clamp(data.get("score")),
                           topic=str(data.get("topic") or "")[:60], model=used)
 
-    async def judge(self, model, lines, passages, already_flagged) -> Verdict:
+    async def judge(self, model, lines, passages, already_flagged, new_lines: int = 1) -> Verdict:
         prompt = (f"Document passages:\n{_passages(passages)}\n\nAlready flagged: {_flagged(already_flagged)}"
-                  f"\n\nTranscript (last line is the new one):\n{_lines(lines)}")
-        d, used = await self.client.claude_tool(model, JUDGE_SYSTEM, prompt, "record_verdict", JUDGE_SCHEMA)
+                  f"\n\nTranscript ({_new_note(lines, new_lines)}):\n{_lines(lines)}")
+        d, used = await self._structured(model, JUDGE_SYSTEM, prompt, "record_verdict", JUDGE_SCHEMA, 1024)
         kind = d.get("kind") if d.get("kind") in KINDS else "uncertainty"
         speakers = {s.speaker_name for s in lines}
         said_by = [n for n in (d.get("said_by") or []) if isinstance(n, str) and n in speakers]
@@ -174,7 +205,7 @@ class RealProvider:
     async def answer(self, model, question, asked_by, passages, max_words) -> AnswerDraft:
         system = ANSWER_SYSTEM.format(max_words=max_words, not_found=NOT_FOUND)
         prompt = f"Document passages:\n{_passages(passages)}\n\nQuestion from {asked_by or 'a participant'}: {question}"
-        d, used = await self.client.claude_tool(model, system, prompt, "record_answer", ANSWER_SCHEMA, 512)
+        d, used = await self._structured(model, system, prompt, "record_answer", ANSWER_SCHEMA, 512)
         spoken = " ".join(str(d.get("spoken") or "").split())
         if not spoken:
             raise LLMError("answer was empty")
@@ -186,8 +217,8 @@ class RealProvider:
             f"- id={a.alert_id} kind={a.kind} topic={a.topic!r} said_by={a.said_by} finding={a.finding!r}"
             for a in alerts) or "(no alerts)"
         prompt = f"Alerts raised:\n{alert_text}\n\nTranscript:\n{_lines(segments)}"
-        d, used = await self.client.claude_tool(model, SUMMARY_SYSTEM, prompt, "record_summary",
-                                                SUMMARY_SCHEMA, 2048)
+        d, used = await self._structured(model, SUMMARY_SYSTEM, prompt, "record_summary",
+                                             SUMMARY_SCHEMA, 2048)
         ids = {a.alert_id for a in alerts}
         items = []
         for item in d.get("action_items") or []:

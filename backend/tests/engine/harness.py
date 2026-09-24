@@ -40,20 +40,25 @@ class Scripted:
     answer_error: Exception | None = None
     answer_delay: float = 0.0
     judge_delay: float = 0.0
+    cheap_delay: float = 0.0
+    new_lines_seen: list = field(default_factory=list)
     summary_error: Exception | None = None
     calls: dict = field(default_factory=lambda: {"cheap": 0, "judge": 0, "answer": 0, "summary": 0})
     name: str = "scripted"
     canned: bool = False
 
-    async def cheap_check(self, model, lines, passages, already_flagged):
+    async def cheap_check(self, model, lines, passages, already_flagged, new_lines=1):
         self.calls["cheap"] += 1
+        self.new_lines_seen.append(new_lines)
+        if self.cheap_delay:
+            await asyncio.sleep(self.cheap_delay)
         if isinstance(self.cheap, Exception):
             raise self.cheap
         if self.cheap is None:
             return CheapCheck(False, 0.0, "", "cheap-model")
-        return self.cheap(lines)
+        return self.cheap(lines, new_lines)
 
-    async def judge(self, model, lines, passages, already_flagged):
+    async def judge(self, model, lines, passages, already_flagged, new_lines=1):
         self.calls["judge"] += 1
         if self.judge_delay:
             await asyncio.sleep(self.judge_delay)
@@ -61,7 +66,7 @@ class Scripted:
             raise self.verdict
         if self.verdict is None:
             return Verdict(is_issue=False, model="judge-model")
-        return self.verdict(lines)
+        return self.verdict(lines, new_lines)
 
     async def answer(self, model, question, asked_by, passages, max_words):
         self.calls["answer"] += 1
@@ -81,13 +86,15 @@ class Scripted:
 
 
 def flag_when(word: str, score: float = 0.9):
-    """Cheap check that flags any last line containing `word`."""
-    return lambda lines: CheapCheck(word in lines[-1].text.lower(), score if word in lines[-1].text.lower() else 0.0,
-                                    word, "cheap-model")
+    """Cheap check that flags when any NEW line contains `word`."""
+    def check(lines, new_lines=1):
+        hit = any(word in l.text.lower() for l in lines[-new_lines:])
+        return CheapCheck(hit, score if hit else 0.0, word, "cheap-model")
+    return check
 
 
 def verdict(confidence: float = 0.9, topic: str = "Q3 revenue was rising", finding: str | None = None):
-    def make(lines):
+    def make(lines, new_lines=1):
         return Verdict(is_issue=True, kind="contradiction", topic=topic, claim=lines[-1].text,
                        said_by=[lines[-1].speaker_name], segment_indexes=[len(lines) - 1],
                        finding=finding or "the board deck says Q3 revenue fell 4%.",
@@ -131,6 +138,7 @@ class Harness:
         from backend.app.pipeline.entry import process_segment, set_engine
         set_engine(self.engine)
         await process_segment(seg, self.ctx())
+        await asyncio.sleep(0)  # like the live receiver, let background checks run between sentences
         return seg
 
     async def settle(self, timeout: float = 5.0):

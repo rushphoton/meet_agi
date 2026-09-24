@@ -43,7 +43,7 @@ from ..knowledge import KnowledgeBase, Passage
 from ..knowledge.index import tokenize
 from ..providers.llm.base import AnswerDraft, LLMError, LLMProvider
 from .gate import check_gate
-from .phrases import detect_stop, detect_wake
+from .phrases import detect_stop, detect_wake, looks_like_wake_attempt
 
 log = logging.getLogger("meet_agi.engine")
 
@@ -53,6 +53,7 @@ ANSWER_PASSAGES = 5          # answers see the top 5
 STOP_GRACE_SECONDS = 5       # "AGI, stop" still counts up to 5 s after an answer (DESIGN.md §4.5)
 QUEUED_ANSWER_MAX_SECONDS = 120  # an answer nobody marked "played" stops counting as speaking after this
 END_DRAIN_SECONDS = 30       # how long the summary waits for checks still running
+MAX_WAITING = 2              # more sentences than this waiting for a dispute check: skip to the newest
 NO_QUESTION = "Sorry, I didn't catch a question."
 ANSWER_FAILED = "Sorry, I couldn't look that up just now."
 
@@ -102,14 +103,35 @@ def _evidence(passages: list[Passage], indexes: list[int]) -> list[Evidence]:
                      locator=passages[i].locator) for i in indexes if 0 <= i < len(passages)]
 
 
+_CONSEQUENCE = {"cheap_check": "alerts are off", "judge": "alerts are off",
+                "answer": "spoken answers are off", "summary": "no summary"}
+_JOB_NAME = {"cheap_check": "check", "judge": "judge", "answer": "answers", "summary": "summary"}
+
+
+def vendor_warning(job: str, model: str, exc: Exception) -> str:
+    """One plain line for /api/health, e.g. "Claude judge failing (HTTP 400: Your credit balance
+    is too low...) - alerts are off". Under 120 characters; never contains a key."""
+    vendor = "Gemini" if model.startswith("gemini-") else "Claude"
+    tail = f" - {_CONSEQUENCE[job]}"
+    head = f"{vendor} {_JOB_NAME[job]} failing ("
+    room = 119 - len(head) - len(tail) - 1
+    detail = " ".join(str(exc).split())
+    detail = detail if len(detail) <= room else detail[: room - 1].rstrip() + "…"
+    return f"{head}{detail}){tail}"
+
+
 def _canned_tag(text: str, canned: bool) -> str:
     return f"{text} (CANNED)" if canned and "CANNED" not in text else text
 
 
 class Engine:
-    def __init__(self, provider: LLMProvider, knowledge: KnowledgeBase) -> None:
+    def __init__(self, provider: LLMProvider, knowledge: KnowledgeBase,
+                 warnings: dict[str, str] | None = None) -> None:
         self.provider = provider
         self.knowledge = knowledge
+        # rt.warnings: /api/health lists these, so a failing vendor is visible on the dashboard,
+        # not only in the log. Key "engine.<job>"; set on failure, removed on the next success.
+        self.warnings = warnings if warnings is not None else {}
         self._states: dict[str, _MeetingState] = {}
 
     # ================= entry: one finished sentence =================
@@ -125,6 +147,9 @@ class Engine:
 
         # 2. "Hey AGI ..." at the start of a sentence.
         wake = detect_wake(segment.text, s.wake.variants, s.wake.max_word_position)
+        if wake is None and looks_like_wake_attempt(segment.text, s.wake.max_word_position):
+            # Rehearsal aid (review B item 7): find the spellings to add to Settings > wake variants.
+            log.info("Possible missed wake phrase (not in wake.variants): %r", segment.text)
         if wake:
             self._cancel_speech(st)  # a new wake supersedes an older, unanswered one
             st.recent.append(segment)
@@ -190,6 +215,13 @@ class Engine:
                 break
             await asyncio.sleep(0.01)
 
+    # ================= vendor health =================
+    def _vendor_ok(self, job: str) -> None:
+        self.warnings.pop(f"engine.{job}", None)
+
+    def _vendor_failed(self, job: str, model: str, exc: Exception) -> None:
+        self.warnings[f"engine.{job}"] = vendor_warning(job, model, exc)
+
     # ================= speech mode =================
     def _speaking(self, st: _MeetingState) -> bool:
         if st.pending is not None or (st.answer_task is not None and not st.answer_task.done()):
@@ -238,8 +270,10 @@ class Engine:
         passages = self.knowledge.search(question, ANSWER_PASSAGES)
         try:
             draft = await self.provider.answer(s.models.answer, question, asked_by, passages, s.answer_max_words)
+            self._vendor_ok("answer")
         except LLMError as exc:
             log.warning("Answer model failed (%s); saying so instead", exc)
+            self._vendor_failed("answer", s.models.answer, exc)
             # The vendor's error text goes to the log only, never into the meeting chat.
             draft = AnswerDraft(spoken=ANSWER_FAILED, chat_line="I couldn't look that up just now.",
                                 passage_indexes=[], model="none")
@@ -273,24 +307,38 @@ class Engine:
     async def _detect_worker(self, st: _MeetingState) -> None:
         while True:
             ctx, lines = await st.detect_queue.get()
+            taken, new_lines = 1, 1
+            # Backlog (review B item 10): when more than MAX_WAITING sentences wait behind this
+            # one, skip to the newest. Its context window still holds the skipped sentences,
+            # and the models are told they are all new, so a claim is not lost - only late.
+            if st.detect_queue.qsize() > MAX_WAITING:
+                while not st.detect_queue.empty():
+                    ctx, lines = st.detect_queue.get_nowait()
+                    taken += 1
+                new_lines = min(taken, len(lines))
+                log.info("Dispute check behind by %d sentences; checking only the newest window", taken)
             try:
-                await self._detect(ctx, st, lines)
+                await self._detect(ctx, st, lines, new_lines)
             except Exception:
                 log.exception("Dispute check failed; skipping this sentence")
             finally:
-                st.detect_in_progress -= 1
-                st.detect_queue.task_done()
+                st.detect_in_progress -= taken
+                for _ in range(taken):
+                    st.detect_queue.task_done()
 
-    async def _detect(self, ctx: MeetingContext, st: _MeetingState, lines: list[TranscriptSegment]) -> None:
+    async def _detect(self, ctx: MeetingContext, st: _MeetingState, lines: list[TranscriptSegment],
+                      new_lines: int = 1) -> None:
         s = ctx.settings
         segment = lines[-1]
-        query = " ".join(l.text for l in lines[-2:])
+        query = " ".join(l.text for l in lines[-(new_lines + 1):])
         try:
             cheap = await self.provider.cheap_check(s.models.cheap_check, lines,
                                                     self.knowledge.search(query, CHEAP_PASSAGES),
-                                                    st.flagged_topics)
+                                                    st.flagged_topics, new_lines)
+            self._vendor_ok("cheap_check")
         except LLMError as exc:
             log.warning("Cheap check failed (%s); no alert for this sentence", exc)
+            self._vendor_failed("cheap_check", s.models.cheap_check, exc)
             return
         if not cheap.worth_a_look or cheap.score < s.gate.cheap_threshold:
             return
@@ -300,9 +348,11 @@ class Engine:
         log.info("Cheap check flagged %r (score %.2f, %s); asking the judge", cheap.topic, cheap.score, cheap.model)
         passages = self.knowledge.search(query, ANSWER_PASSAGES)
         try:
-            verdict = await self.provider.judge(s.models.judge, lines, passages, st.flagged_topics)
+            verdict = await self.provider.judge(s.models.judge, lines, passages, st.flagged_topics, new_lines)
+            self._vendor_ok("judge")
         except LLMError as exc:
             log.warning("Judge failed (%s); no alert for this sentence", exc)
+            self._vendor_failed("judge", s.models.judge, exc)
             return
         if not verdict.is_issue:
             return
@@ -314,11 +364,12 @@ class Engine:
         topic = _truncate(verdict.topic or cheap.topic or "a disputed fact", 60)
         finding = verdict.finding or "the documents may disagree."
         said = [lines[i] for i in verdict.segment_indexes if 0 <= i < len(lines)] or [segment]
+        claimed = said[-1]
         alert_id = new_id("alr")
         models = [cheap.model, verdict.model]
         await ctx.bus.publish(ctx.meeting_id, "alert", Alert(
-            alert_id=alert_id, kind=verdict.kind, topic=topic, claim=verdict.claim or segment.text,
-            said_by=verdict.said_by or [segment.speaker_name], segment_ids=[l.segment_id for l in said],
+            alert_id=alert_id, kind=verdict.kind, topic=topic, claim=verdict.claim or claimed.text,
+            said_by=verdict.said_by or [claimed.speaker_name], segment_ids=[l.segment_id for l in said],
             finding=finding, evidence=_evidence(passages, verdict.passage_indexes),
             reasoning=verdict.reasoning or "(no reasoning returned)", confidence=verdict.confidence,
             gated=not gate.passed, gate_reason=gate.reason, delivered_to_chat=gate.passed and not muted,
@@ -362,13 +413,17 @@ class Engine:
         alerts = [a for a in record.alerts if not a.gated]
         try:
             draft = await self.provider.summarize(ctx.settings.models.summary, record.segments, alerts)
+            self._vendor_ok("summary")
             key_topics, takeaways, items, unsettled, canned = (
                 draft.key_topics, draft.takeaways, draft.action_items, draft.unsettled_alert_ids, draft.canned)
         except LLMError as exc:
+            # The vendor's message (billing, HTTP codes) goes to the log and /api/health only -
+            # never into the review screen the room may be looking at (review B item 1).
             log.warning("Summary model failed (%s)", exc)
+            self._vendor_failed("summary", ctx.settings.models.summary, exc)
             key_topics = [a.topic for a in alerts]
-            takeaways = [f"SUMMARY UNAVAILABLE: the summary model could not be reached ({exc}). "
-                         f"The transcript and alerts are complete."]
+            takeaways = ["SUMMARY UNAVAILABLE: the summary could not be written this time. "
+                         "The transcript and alerts are complete."]
             items, unsettled, canned = [], [a.alert_id for a in alerts], False
 
         follow_ups = [FollowUp(follow_up_id=new_id("fu"), text=i.text, owner=i.owner, status="outstanding")
