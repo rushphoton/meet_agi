@@ -12,6 +12,7 @@ where parallel branches collide at merge time (CLAUDE.md rule 10).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Awaitable, Callable
 
 from ..contract.records import CreateMeetingRequest, MeetingRecord, Settings
@@ -35,3 +36,7 @@ class Runtime:
     launch_bot: LaunchBot | None = None            # slot: meeting lane
     end_bot: EndBot | None = None                  # slot: meeting lane
     placeholders: set[str] = field(default_factory=set)  # names of parts still canned
+    # Live problems, keyed by who owns them ("engine.judge", "meeting.voice", ...). A lane sets
+    # its key when a vendor call fails and removes it when one succeeds; /api/health lists them.
+    warnings: dict[str, str] = field(default_factory=dict)
+    last_webhook_at: datetime | None = None  # set by the meeting lane's receiver on every webhook

@@ -43,7 +43,9 @@ def build_router(rt: Runtime, settings_store) -> APIRouter:
     @r.get("/api/health", response_model=Health)
     async def health() -> Health:
         return Health(ok=True, offline=rt.config.offline, dev_mode=rt.config.dev_mode,
-                      placeholders=sorted(rt.placeholders))
+                      placeholders=sorted(rt.placeholders),
+                      warnings=[rt.warnings[k] for k in sorted(rt.warnings)],
+                      last_webhook_at=rt.last_webhook_at)
 
     # ---------------- meetings ----------------
     @r.get("/api/meetings", response_model=list[MeetingListItem])

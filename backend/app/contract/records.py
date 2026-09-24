@@ -158,6 +158,14 @@ class Health(_Model):
     offline: bool
     dev_mode: bool
     placeholders: list[str]
+    # Live problems right now (for example "Claude: credit balance too low", "voice: Inworld failing").
+    # Placeholders say what is canned by design; warnings say what is broken at this moment.
+    # Added at integrate after review B (observability): a green health page while every
+    # Claude call failed was the failure it prevents.
+    warnings: list[str] = []
+    # When the last Recall webhook reached the receiver (None before the first one). Lets the
+    # dashboard tell a quiet room from a dead pipe (risk R6).
+    last_webhook_at: datetime | None = None
 
 
 class Ok(_Model):
