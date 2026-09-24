@@ -19,6 +19,9 @@ def make_client(tmp_path, monkeypatch):
         monkeypatch.setenv("MEETAGI_KNOWLEDGE_DIR", str(tmp_path / "knowledge"))
         monkeypatch.setenv("RECALL_WEBHOOK_TOKEN", token)
         monkeypatch.setenv("DEV_MODE", "1" if dev_mode else "0")
+        # Tests never call a vendor and never depend on the keys in .env (DESIGN §10 rule 4).
+        monkeypatch.setenv("OFFLINE", "1")
+        monkeypatch.setenv("RECALL_API_KEY", "")
         from backend.app.main import create_app
         return TestClient(create_app())
     return _make

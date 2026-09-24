@@ -61,9 +61,11 @@ def test_muted_meeting_posts_nothing_to_chat(client):
     assert all(c["status"] == "suppressed_muted" for c in record["chat_posts"])
 
 
-def test_sending_a_real_bot_says_not_built_yet(client):
+def test_sending_a_real_bot_without_a_recall_key_names_the_missing_setting(client):
+    # Milestone 0 answered 501 "not built yet"; the meeting lane now fills the launch slot.
+    # With no RECALL_API_KEY it must refuse with 503 and name the setting (never a value).
     r = client.post("/api/meetings", json={"meeting_url": "https://meet.google.com/abc-defg-hij"})
-    assert r.status_code == 501 and "not built yet" in r.json()["detail"]
+    assert r.status_code == 503 and "RECALL_API_KEY" in r.json()["detail"]
 
 
 def test_dev_endpoints_are_off_without_dev_mode(make_client):

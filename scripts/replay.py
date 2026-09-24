@@ -131,8 +131,12 @@ def run_once(base: str, token: str, speed: float) -> bool:
 
     listener.join(timeout=15)
     done.set()
-    counts = {t: sum(e["type"] == t for e in seen)
-              for t in ("alert", "spoken.answer", "wake", "meeting.summary", "transcript.segment")}
+    counts = {t: sum(e["type"] == t for e in seen) for t in ("wake", "meeting.summary", "transcript.segment")}
+    # The meeting lane publishes progress (playing/played, sent) as new events with the same id,
+    # so answers are counted by distinct answer_id, and alerts only if they passed the gate
+    # (held-back alerts are dashboard-only by design).
+    counts["spoken.answer"] = len({e["payload"]["answer_id"] for e in seen if e["type"] == "spoken.answer"})
+    counts["alert"] = len({e["payload"]["alert_id"] for e in seen if e["type"] == "alert" and not e["payload"]["gated"]})
     expected = script["expected"]
     ok = (counts["alert"] == expected["alerts"] and counts["spoken.answer"] == expected["spoken_answers"]
           and counts["meeting.summary"] == expected["meeting_summaries"] and counts["wake"] == expected["wake_events"]

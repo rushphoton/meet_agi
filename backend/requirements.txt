@@ -14,3 +14,7 @@ python-multipart==0.0.32
 httpx==0.28.1
 # pytest: runs the tests. Without it: no automated proof.
 pytest==9.1.1
+# pypdf: reads text out of .pdf documents uploaded on the settings screen (DESIGN §8 decision 2).
+#   Pure Python, free. Without it: PDFs are skipped by the knowledge loader and only .md/.txt count.
+#   Replace only if scanned (image) PDFs must be read, which would justify an OCR tool.
+pypdf==6.19.0
