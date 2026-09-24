@@ -65,3 +65,16 @@ def detect_stop(text: str, variants: list[str]) -> str | None:
         if f" {variant} " in padded:
             return variant
     return None
+
+
+def looks_like_wake_attempt(text: str, max_word_position: int = 3) -> bool:
+    """True when a sentence opens like a wake ("Hey Aggie, ...", "Hi AJ ...") - "hey" or "hi"
+    within the first words, after fillers only. Used only to LOG likely misses during
+    rehearsal, so the spellings speech-to-text really produces can be added in Settings."""
+    tokens = normalize(text).split()
+    for start in range(min(max_word_position, len(tokens))):
+        if tokens[start] in ("hey", "hi"):
+            return True
+        if tokens[start] not in OPENERS:
+            return False
+    return False

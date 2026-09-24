@@ -159,3 +159,55 @@ def test_canned_provider_says_it_is_canned_everywhere():
     assert v.canned and "CANNED" in v.reasoning
     assert a.canned and "CANNED" in a.spoken and "CANNED" in a.chat_line
     assert "CANNED" in empty.spoken and "couldn't find" in empty.spoken
+
+
+# ---------------- review B item 1: moving jobs to Gemini from Settings ----------------
+def test_judge_answer_and_summary_run_on_gemini_when_settings_name_a_gemini_model(keys):
+    """Anthropic had no credit (24 Sep); every careful job failed. With a gemini-... model in
+    Settings those jobs must go to Gemini, and Anthropic must not be called at all."""
+    replies = {
+        "record_verdict": {"is_issue": True, "kind": "contradiction", "topic": "Q3 revenue was rising",
+                           "claim": "rising", "said_by": ["Marcus Chen"], "line_numbers": [1],
+                           "finding": "The board deck says it fell 4%.", "reasoning": "r",
+                           "confidence": 0.9, "passage_numbers": [0]},
+        "record_answer": {"spoken": "The board deck says Q3 revenue fell 4 percent.",
+                          "chat_line": "Q3 revenue fell 4% (board deck).", "passage_numbers": [0]},
+        "record_summary": {"key_topics": ["Q3 revenue"], "takeaways": ["Revenue fell."],
+                           "action_items": [{"text": "Send the bridge", "owner": "Dana Lee"}],
+                           "unsettled_alert_ids": []},
+    }
+    hosts = []
+
+    def handler(request):
+        hosts.append(request.url.host)
+        assert request.url.host == "generativelanguage.googleapis.com", "Anthropic must not be called"
+        system = json.loads(request.content)["systemInstruction"]["parts"][0]["text"]
+        tool = next(t for t in replies if t in system)
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": json.dumps(replies[tool])}]}}]})
+
+    p = provider_with(handler)
+    v = asyncio.run(p.judge("gemini-2.5-flash", LINES, PASSAGES, []))
+    a = asyncio.run(p.answer("gemini-2.5-flash", "What was Q3 revenue?", "Tom Walsh", PASSAGES, 60))
+    s = asyncio.run(p.summarize("gemini-2.5-flash", LINES, []))
+    assert set(hosts) == {"generativelanguage.googleapis.com"} and len(hosts) == 3
+    assert v.is_issue and v.model == "gemini-2.5-flash" and v.said_by == ["Marcus Chen"]
+    assert a.spoken.startswith("The board deck") and a.model == "gemini-2.5-flash"
+    assert s.action_items[0].owner == "Dana Lee" and s.model == "gemini-2.5-flash"
+
+
+def test_cheap_check_can_move_to_claude_the_same_way(keys):
+    def handler(request):
+        assert request.url.host == "api.anthropic.com"
+        return claude_reply("record_check", {"worth_a_look": True, "score": 0.7, "topic": "Q3 revenue"})
+    c = asyncio.run(provider_with(handler).cheap_check("claude-haiku-4-5-20251001", LINES, PASSAGES, []))
+    assert c.worth_a_look and c.score == 0.7
+
+
+def test_models_are_told_which_lines_are_new_after_a_skipped_backlog(keys):
+    seen = {}
+    def handler(request):
+        seen["prompt"] = json.loads(request.content)["contents"][0]["parts"][0]["text"]
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [
+            {"text": '{"worth_a_look": false, "score": 0, "topic": ""}'}]}}]})
+    asyncio.run(provider_with(handler).cheap_check("gemini-3.5-flash-lite", LINES, PASSAGES, [], new_lines=2))
+    assert "the last 2 lines are new" in seen["prompt"]

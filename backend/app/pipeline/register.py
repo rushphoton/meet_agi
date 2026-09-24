@@ -9,7 +9,9 @@ status updates from the meeting lane, and the end of the meeting.
 FAILURE IT PREVENTS
 The engine lane needing to edit the shared entry file (CLAUDE.md rule 10),
 and the health check hiding that the engine is running on canned answers:
-when it is, /api/health lists "engine: canned AI provider (...why...)".
+when it is, /api/health lists "engine: canned AI provider (...why...)"; and
+when a vendor call fails live, /api/health lists a warning such as "Claude
+judge failing (HTTP 400: ...) - alerts are off" until a call succeeds again.
 """
 from __future__ import annotations
 
@@ -25,7 +27,8 @@ def register(rt: Runtime) -> None:
     reason = canned_reason(rt.config.offline)
     if reason:
         rt.placeholders.add(f"engine: canned AI provider ({reason})")
-    set_engine(Engine(choose_provider(rt.config.offline), KnowledgeBase(rt.config.knowledge_dir)))
+    set_engine(Engine(choose_provider(rt.config.offline), KnowledgeBase(rt.config.knowledge_dir),
+                      warnings=rt.warnings))
 
     # Handlers look the engine up at event time, so a test can swap in a scripted one.
     def ctx_for(meeting_id: str) -> MeetingContext:

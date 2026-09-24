@@ -64,6 +64,77 @@ def test_vendor_error_text_never_reaches_the_meeting_chat(tmp_path):
     run(go())
 
 
+CREDIT = "HTTP 400: Your credit balance is too low to access the Anthropic API."
+
+
+def test_billing_message_never_reaches_the_review_screen_summary(tmp_path):
+    """Review B item 1: the summary said 'SUMMARY UNAVAILABLE ... (HTTP 400: Your credit balance
+    is too low ...)', putting Anthropic's billing message on the projector."""
+    async def go():
+        h = Harness(tmp_path, Scripted(summary_error=LLMError(CREDIT)))
+        await h.say("Tom Walsh", "Let's wrap up.")
+        await h.end()
+        text = " ".join(h.record.summary.takeaways + h.record.summary.key_topics)
+        assert "SUMMARY UNAVAILABLE" in text
+        assert "credit" not in text.lower() and "HTTP" not in text
+        assert "credit balance" in h.engine.warnings["engine.summary"]   # shown on /api/health instead
+    run(go())
+
+
+def test_claude_without_credit_shows_a_health_warning_that_clears_when_it_recovers(tmp_path):
+    """Review B item 1: /api/health said nothing was wrong while every Claude call failed."""
+    async def go():
+        from backend.app.providers.llm.base import Verdict
+        failing = {"on": True}
+
+        def judge(lines, new_lines=1):
+            if failing["on"]:
+                raise LLMError(CREDIT)
+            return Verdict(is_issue=False, model="judge-model")
+        h = Harness(tmp_path, Scripted(cheap=flag_when("revenue"), verdict=judge))
+        await h.say("Marcus Chen", DISPUTE)
+        await h.settle()
+        warning = h.engine.warnings["engine.judge"]
+        assert warning.startswith("Claude judge failing (HTTP 400: Your credit balance")
+        assert warning.endswith("- alerts are off") and len(warning) < 120
+        failing["on"] = False
+        await h.say("Marcus Chen", "Revenue is up, again.", at=500)
+        await h.settle()
+        assert "engine.judge" not in h.engine.warnings
+    run(go())
+
+
+def test_each_failing_job_gets_its_own_plain_health_warning(tmp_path):
+    async def go():
+        h = Harness(tmp_path, Scripted(cheap=LLMError("timed out after 8 s"),
+                                       answer_error=LLMError(CREDIT), summary_error=LLMError(CREDIT)))
+        h.settings.models.cheap_check = "gemini-3.5-flash-lite"
+        await h.say("Marcus Chen", DISPUTE)
+        await h.say("Tom Walsh", QUESTION)
+        await h.settle()
+        await h.end()
+        w = h.engine.warnings
+        assert w["engine.cheap_check"] == "Gemini check failing (timed out after 8 s) - alerts are off"
+        assert w["engine.answer"].startswith("Claude answers failing (") and w["engine.answer"].endswith("spoken answers are off")
+        assert w["engine.summary"].endswith("- no summary") and all(len(v) < 120 for v in w.values())
+    run(go())
+
+
+def test_health_endpoint_lists_the_engine_warning(make_client, tmp_path):
+    from backend.app.knowledge import KnowledgeBase
+    from backend.app.pipeline.engine import Engine
+    from backend.app.pipeline.entry import set_engine
+    from backend.tests.conftest import wait_for
+    with make_client() as client:
+        rt = client.app.state.runtime
+        set_engine(Engine(Scripted(answer_error=LLMError(CREDIT)), KnowledgeBase(tmp_path / "knowledge"),
+                          warnings=rt.warnings))
+        m = client.post("/api/dev/meetings", json={"title": "t"}).json()
+        client.post(f"/api/meetings/{m['meeting_id']}/wake", json={"question": "What was Q3 revenue?"})
+        health = wait_for(lambda: (h := client.get("/api/health").json())["warnings"] and h)
+        assert any(w.startswith("Claude answers failing (HTTP 400") for w in health["warnings"])
+
+
 def test_summary_model_failure_still_ends_the_meeting_with_a_summary_that_says_so(tmp_path):
     async def go():
         h = Harness(tmp_path, Scripted(cheap=flag_when("revenue"), verdict=verdict(),
@@ -134,7 +205,7 @@ def test_room_still_arguing_the_same_point_does_not_pay_for_the_judge_again(tmp_
     """Seen in the first live run: Gemini flagged the claim AND the three sentences after it
     ('I'm not sure that's right', ...) as 'Q3 revenue trend'. One alert is enough."""
     async def go():
-        def cheap(lines):
+        def cheap(lines, new_lines=1):
             from backend.app.providers.llm.base import CheapCheck
             return CheapCheck(True, 0.95, "Q3 revenue trend vs Q2", "cheap-model")
         h = Harness(tmp_path, Scripted(cheap=cheap, verdict=verdict()))
@@ -146,6 +217,44 @@ def test_room_still_arguing_the_same_point_does_not_pay_for_the_judge_again(tmp_
         await h.say("Dana Lee", "Q3 revenue was up, I promise.", at=200)   # after the cooldown: judged again
         await h.settle()
         assert h.provider.calls["judge"] == 2
+    run(go())
+
+
+def test_slow_checks_in_a_lively_meeting_skip_the_backlog_but_keep_the_claim(tmp_path):
+    """Review B item 10: one check at a time, each up to 8 s, meant alerts minutes late about
+    points the room had moved past. With more than 2 waiting, only the newest window is checked."""
+    async def go():
+        from backend.app.providers.llm.base import Verdict
+
+        def judge(lines, new_lines=1):
+            i = next(i for i in range(len(lines) - new_lines, len(lines)) if "rising" in lines[i].text.lower())
+            return Verdict(is_issue=True, kind="contradiction", topic="Q3 revenue was rising",
+                           claim=lines[i].text, said_by=[lines[i].speaker_name], segment_indexes=[i],
+                           finding="the board deck says Q3 revenue fell 4%.", reasoning="r",
+                           confidence=0.9, passage_indexes=[0], model="judge-model")
+        h = Harness(tmp_path, Scripted(cheap=flag_when("rising"), verdict=judge, cheap_delay=0.2))
+        await h.say("Dana Lee", "Bookings came in at fifty two million.")      # checked alone (slow)
+        await h.say("Marcus Chen", DISPUTE)                                     # these four pile up
+        await h.say("Priya Nair", "Churn stayed flat.")
+        await h.say("Tom Walsh", "Good.")
+        await h.say("Dana Lee", "Margin improved to sixty one percent.")
+        await h.settle()
+        assert h.provider.new_lines_seen == [1, 4]           # two checks, not five
+        [a] = alerts(h)
+        assert a.said_by == ["Marcus Chen"] and a.claim == DISPUTE
+        assert h.engine._states[h.meeting_id].detect_in_progress == 0
+    run(go())
+
+
+def test_near_miss_wake_phrase_is_logged_for_rehearsal(tmp_path, caplog):
+    async def go():
+        h = Harness(tmp_path, Scripted())
+        with caplog.at_level("INFO", logger="meet_agi.engine"):
+            await h.say("Tom Walsh", "Hey Aggie, what was Q3 revenue?")
+            await h.say("Tom Walsh", QUESTION)
+            await h.say("Priya Nair", "They said hey to everyone.")
+        misses = [r.getMessage() for r in caplog.records if "missed wake" in r.getMessage()]
+        assert misses == ["Possible missed wake phrase (not in wake.variants): 'Hey Aggie, what was Q3 revenue?'"]
     run(go())
 
 

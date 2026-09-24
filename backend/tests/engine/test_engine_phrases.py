@@ -2,7 +2,7 @@
 import pytest
 
 from backend.app.contract.records import Settings
-from backend.app.pipeline.phrases import detect_stop, detect_wake
+from backend.app.pipeline.phrases import detect_stop, detect_wake, looks_like_wake_attempt
 
 S = Settings()
 WAKE = S.wake.variants
@@ -58,3 +58,16 @@ def test_sentences_that_merely_contain_stop_or_agi_are_not_stop_commands(sentenc
                                       "a g i stop talking", "Aji, stop talking please."])
 def test_stop_phrase_variants_are_recognised_anywhere_in_the_sentence(sentence):
     assert detect_stop(sentence, S.stop_variants) is not None
+
+
+# ---------------- review B item 7: find the wake spellings rehearsal actually produces ----------------
+@pytest.mark.parametrize("sentence", ["Hey Aggie, what was Q3 revenue?", "Okay hey AJ what's churn",
+                                      "Hi Ajay.", "So hey AI, tell me the margin"])
+def test_mistranscribed_wake_phrase_is_recognised_as_a_likely_miss(sentence):
+    assert detect_wake(sentence, WAKE) is None
+    assert looks_like_wake_attempt(sentence)
+
+
+@pytest.mark.parametrize("sentence", ["They said hey to everyone.", "Whatever, hi.", "The hey AGI thing is cool."])
+def test_sentences_that_do_not_open_with_hey_are_not_likely_misses(sentence):
+    assert not looks_like_wake_attempt(sentence)

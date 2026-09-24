@@ -87,7 +87,8 @@ class VendorClient:
             raise
 
     # ---------------- Gemini ----------------
-    async def gemini_json(self, model: str, system: str, prompt: str) -> tuple[dict, str]:
+    async def gemini_json(self, model: str, system: str, prompt: str,
+                          max_tokens: int = 256) -> tuple[dict, str]:
         key = gemini_key()
         if not key:
             raise LLMError("GEMINI_API_KEY is not set")
@@ -97,7 +98,7 @@ class VendorClient:
                 "systemInstruction": {"parts": [{"text": system}]},
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                 "generationConfig": {"temperature": 0, "responseMimeType": "application/json",
-                                     "maxOutputTokens": 256},
+                                     "maxOutputTokens": max_tokens},
             }
             data = await self._post(GEMINI_URL.format(model=m), {"x-goog-api-key": key}, body)
             return parse_gemini(data), m
