@@ -22,4 +22,7 @@ port = int(os.environ.get("PORT", "8000"))
 import uvicorn  # noqa: E402
 
 print(f"Meet AGI backend on http://localhost:{port}  (health: http://localhost:{port}/api/health)")
-uvicorn.run("backend.app.main:app", host="127.0.0.1", port=port, log_level="warning")
+# timeout_keep_alive: uvicorn's default (5 s) equals the dashboard's 5 s health poll, so the dashboard's
+# proxy sometimes reused a connection uvicorn had just closed -> "read ECONNRESET" and a 500 on the
+# live screen (seen at integrate, 24 Sep 2026). 65 s outlasts every poll interval.
+uvicorn.run("backend.app.main:app", host="127.0.0.1", port=port, log_level="warning", timeout_keep_alive=65)

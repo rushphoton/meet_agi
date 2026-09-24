@@ -54,8 +54,10 @@ def build_router(rt: Runtime, settings_store) -> APIRouter:
 
     @r.post("/api/meetings", response_model=MeetingRecord)
     async def create_meeting(body: CreateMeetingRequest):
-        if rt.store.live_meeting():
-            raise HTTPException(409, "A meeting is already live; end it first (one at a time).")
+        live = rt.store.live_meeting()
+        if live:
+            raise HTTPException(409, f'Meeting "{live.title}" ({live.meeting_id}) is still live; '
+                                     "end it first (one meeting at a time)")
         if rt.launch_bot is None:
             raise HTTPException(501, "Sending a real bot is not built yet (meeting lane).")
         return await rt.launch_bot(body)
@@ -175,8 +177,12 @@ def build_router(rt: Runtime, settings_store) -> APIRouter:
     async def create_replay_meeting(body: ReplayMeetingRequest):
         if not rt.config.dev_mode:
             raise HTTPException(404, "Dev endpoints are off (set DEV_MODE=1).")
-        if rt.store.live_meeting():
-            live = rt.store.live_meeting()
+        live = rt.store.live_meeting()
+        if live and live.source == "recall":
+            # Review B P2: ending a real meeting from here would leave the bot in the call.
+            raise HTTPException(409, f'A real meeting "{live.title}" ({live.meeting_id}) is live; '
+                                     "end it from the dashboard before replaying")
+        if live:
             await rt.bus.publish(live.meeting_id, "meeting.ended", MeetingEnded(reason="dashboard"))
         return rt.store.create_meeting(title=body.title, source="replay",
                                        recall_bot_id=f"replay-{new_id('bot')}")

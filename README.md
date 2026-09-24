@@ -22,9 +22,15 @@ The first command you run creates a private Python environment (`.venv`) and ins
    ```
    python scripts/verify.py
    ```
-3. **Replay the fake meeting end to end.** It plays the scripted 3-minute Q3 revenue review through the real backend at 10x speed, printing every event live. If no backend is running it starts its own and stops it after. It ends with `REPLAY OK`. Options: `--speed 1` for real time, `--loop` to repeat until Ctrl+C. To use canned providers only, run `$env:OFFLINE=1` in PowerShell first. At milestone 0 everything is canned anyway.
+3. **Replay the fake meeting end to end.** It plays the scripted 3-minute Q3 revenue review through the real backend at 10x speed, printing every event live. If no backend is running it starts its own and stops it after. It ends with `REPLAY OK`. Options: `--speed 1` for real time, `--loop` to repeat until Ctrl+C. To use canned providers only, run `$env:OFFLINE=1` in PowerShell first (set it in the window that runs the backend too).
    ```
    python scripts/replay.py
    ```
+4. **Open the dashboard.** In a second PowerShell window in this folder (the backend from step 1 must be running). The first time, install it: `npm --prefix frontend install`. Then build and start it, and open http://localhost:3000 (sessions), http://localhost:3000/live (live meeting) and the Review link on each session. Its own check (type check, tests, build): `npm --prefix frontend run verify`.
+   ```
+   npm --prefix frontend run build; npm --prefix frontend run start
+   ```
 
-What is real and what is placeholder right now: `GET /api/health` lists every placeholder. At milestone 0 the engine and the meeting receiver are placeholders, and everything they produce is marked CANNED.
+Panic button: `python scripts/end_all_bots.py` makes every Meet AGI bot leave its call.
+
+What is real and what is placeholder right now: `GET /api/health` lists every placeholder (canned by design) and every warning (a vendor failing right now). The dashboard shows both at the top of every page.

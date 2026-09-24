@@ -15,7 +15,9 @@ across; not before (DESIGN.md §9).
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +28,9 @@ from ..contract.records import MeetingListItem, MeetingRecord, Participant
 from .ids import new_id
 
 _events_adapter = TypeAdapter(list[Event])
+log = logging.getLogger("meet_agi.store")
+SAVE_ATTEMPTS = 5          # review B item 9: Windows Defender/OneDrive can hold the file for a moment
+SAVE_RETRY_SECONDS = 0.05
 
 
 class Store:
@@ -118,7 +123,12 @@ class Store:
             r.ended_at = r.ended_at or event.at
         r.events_last_seq = event.seq
         self._events[event.meeting_id].append(event)
-        self._save(event.meeting_id)
+        try:
+            self._save(event.meeting_id)
+        except OSError:
+            # The in-memory record is already updated and the live path (chat, voice, summary)
+            # must keep going; the next event's save writes the whole file again.
+            log.exception("Could not save meeting %s to disk; will retry on the next event", event.meeting_id)
 
     # ---------- disk ----------
     def path_for(self, meeting_id: str) -> Path:
@@ -132,7 +142,14 @@ class Store:
         path = self.path_for(meeting_id)
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
-        os.replace(tmp, path)
+        for attempt in range(SAVE_ATTEMPTS):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == SAVE_ATTEMPTS - 1:
+                    raise
+                time.sleep(SAVE_RETRY_SECONDS)
 
     def _load(self) -> None:
         for path in self.dir.glob("*.json"):
@@ -140,6 +157,13 @@ class Store:
             record = MeetingRecord.model_validate(data["record"])
             self._records[record.meeting_id] = record
             self._events[record.meeting_id] = _events_adapter.validate_python(data["events"])
+            # Review B item 4: a fake meeting stopped with Ctrl+C was reloaded as "live" forever and
+            # blocked sending the real bot (HTTP 409). Nothing can still be replaying after a restart,
+            # so close it. Real (recall) meetings stay open: the bot may still be in the call.
+            if record.source == "replay" and record.ended_at is None:
+                events = self._events[record.meeting_id]
+                record.ended_at = events[-1].at if events else record.started_at
+                self._save(record.meeting_id)
 
 
 def _upsert(items: list, item, key: str) -> None:

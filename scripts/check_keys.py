@@ -35,9 +35,27 @@ def need(name):
         return False
     return True
 
+def post(url, headers, body):
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
+                                 headers={"User-Agent": "meet-agi-check", "content-type": "application/json", **headers})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+    except Exception as e:
+        return None, type(e).__name__.encode()
+
 if need("ANTHROPIC_API_KEY"):
-    report("ANTHROPIC_API_KEY", *get("https://api.anthropic.com/v1/models?limit=1",
-        {"x-api-key": env["ANTHROPIC_API_KEY"], "anthropic-version": "2023-06-01"}))
+    # Review B item 1: listing models succeeds even with zero credit, so the old check said OK while
+    # every real call failed. This sends one real 1-token message (costs well under US$0.001).
+    s, b = post("https://api.anthropic.com/v1/messages",
+                {"x-api-key": env["ANTHROPIC_API_KEY"], "anthropic-version": "2023-06-01"},
+                {"model": "claude-haiku-4-5-20251001", "max_tokens": 1, "messages": [{"role": "user", "content": "ok"}]})
+    if s == 400 and b"credit balance" in b:
+        print("ANTHROPIC_API_KEY: FAIL - key works but the account has no credit (console.anthropic.com > Plans & Billing)")
+    else:
+        report("ANTHROPIC_API_KEY", s, b"")
 
 if need("GEMINI_API_KEY"):
     report("GEMINI_API_KEY", *get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
