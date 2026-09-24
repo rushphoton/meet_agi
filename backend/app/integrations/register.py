@@ -34,7 +34,7 @@ from ..core.runtime import Runtime
 from ..providers.voice import InworldVoice, VoiceService
 from ..speech.audio_out import AudioOut
 from ..speech.fillers import FillerBank
-from .bot import BotLifecycle
+from .bot import POLL_SECONDS, BotLifecycle
 from .chat import ChatPoster
 from .receiver import RecallReceiver
 from .recall_client import DryRunTarget, RecallClient, is_replay_bot
@@ -47,17 +47,19 @@ class MeetingLane:
 
     def __init__(self, rt: Runtime, *, recall_transport: httpx.AsyncBaseTransport | None = None,
                  inworld_transport: httpx.AsyncBaseTransport | None = None,
-                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> None:
+                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+                 poll_seconds: float = POLL_SECONDS) -> None:
         recall_key = os.environ.get("RECALL_API_KEY", "").strip()
         inworld_key = os.environ.get("INWORLD_API_KEY", "").strip()
         self.recall = RecallClient(recall_key, rt.config.recall_region, transport=recall_transport)
         self.dry_run = DryRunTarget()
         inworld = InworldVoice(inworld_key, transport=inworld_transport) if inworld_key else None
         self.voice = VoiceService(inworld, offline=rt.config.offline,
-                                  fallback_voice_id=os.environ.get("INWORLD_VOICE_ID", "").strip())
+                                  fallback_voice_id=os.environ.get("INWORLD_VOICE_ID", "").strip(),
+                                  warnings=rt.warnings)
         self.fillers = FillerBank(self.voice)
         self.receiver = RecallReceiver(rt)
-        self.bot = BotLifecycle(rt, self.recall, api_key_set=bool(recall_key))
+        self.bot = BotLifecycle(rt, self.recall, api_key_set=bool(recall_key), poll_seconds=poll_seconds)
         self.audio = AudioOut(rt.bus, rt.store, rt.get_settings, self.voice, self.fillers,
                               self.target_for, sleep=sleep)
         self.chat = ChatPoster(rt.bus, rt.store, self.target_for)
@@ -90,8 +92,18 @@ def subscriptions(lane: MeetingLane) -> list[tuple[str, Callable]]:
     ]
 
 
+_LANES: dict[int, MeetingLane] = {}
+
+
+def lane_for(rt: Runtime) -> MeetingLane:
+    """The meeting lane registered on this Runtime. The integrate step's end-all script uses
+    `await lane_for(rt).bot.end_all()` (make every "Meet AGI" bot leave)."""
+    return _LANES[id(rt)]
+
+
 def install(rt: Runtime, lane: MeetingLane) -> MeetingLane:
     """Fill the slots and subscribe. Tests call this with a lane wired to the fake Recall."""
+    _LANES[id(rt)] = lane
     rt.recall_webhook = lane.receiver
     rt.launch_bot = lane.bot.launch
     rt.end_bot = lane.bot.leave
@@ -101,8 +113,11 @@ def install(rt: Runtime, lane: MeetingLane) -> MeetingLane:
     if not lane.recall_key_set:
         rt.placeholders.add("Recall bot: no RECALL_API_KEY yet - sending a real bot answers 503; "
                             "the fake meeting uses the DRY RUN target")
-    if not lane.voice.real_voice_available:
-        rt.placeholders.add("voice: CANNED sample clip (OFFLINE=1 or no INWORLD_API_KEY)")
+    if rt.config.offline:
+        rt.placeholders.add("voice: CANNED sample clip (OFFLINE=1)")
+    elif lane.voice.inworld is None:
+        rt.placeholders.add("voice: no INWORLD_API_KEY - a real call gets chat answers only; "
+                            "the fake meeting uses the CANNED clip")
     if rt.config.recall_workspace_secret:
         rt.placeholders.add("Recall signature: checked but not enforced (receiver gets parsed JSON, "
                             "not raw bytes)")

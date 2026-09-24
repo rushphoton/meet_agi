@@ -11,7 +11,10 @@ WHY THIS EXISTS
   in line, cuts the clip that is playing (Recall DELETE output_audio), and
   marks those answers "stopped";
 - on `mute`: the same, marking them "muted"; while muted nothing is played;
-- on `meeting.ended`: throws away whatever is left.
+- on `meeting.ended`: throws away whatever is left; nothing is ever played
+  into a meeting that has ended.
+- if the voice fails during a real call: plays nothing (never the canned
+  clip), marks the answer "failed" and skips fillers while the voice is down.
 
 Each answer's progress is published as a NEW spoken.answer event with the
 same answer_id and a new status ("playing", "played", "stopped", "muted",
@@ -79,6 +82,8 @@ class AudioOut:
         if self._muted(event.meeting_id) or self._ended(event.meeting_id):
             return
         m = self._meeting(event.meeting_id)
+        if self.voice.failing and not m.target.is_dry_run:
+            return  # voice is down: no filler, no 8 s wait - the answer goes to chat (review B item 6)
         s = self.get_settings()
         line = self.fillers.next_line(s.fillers)
         task = asyncio.get_running_loop().create_task(self.fillers.clip(
@@ -171,7 +176,15 @@ class AudioOut:
         await asyncio.wait({item.clip_task})
         if item.dropped or item.clip_task.cancelled():
             return
+        if item.clip_task.exception() is not None:   # real call, voice failing: play nothing
+            if item.answer is not None:
+                await self._publish(m.meeting_id, item.answer, "failed")
+            return
         clip: VoiceClip = item.clip_task.result()
+        if self._ended(m.meeting_id):
+            if item.answer is not None:
+                await self._publish(m.meeting_id, item.answer, "stopped")
+            return
         if self._muted(m.meeting_id):
             item.dropped = True
             if item.answer is not None:

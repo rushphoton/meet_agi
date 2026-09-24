@@ -199,3 +199,108 @@ def test_real_bot_meeting_plays_filler_then_answer_and_posts_chat_through_recall
         assert any(t in client.app.state.runtime.get_settings().fillers for t in texts)
         (chat,) = fake_recall.bodies("/send_chat_message/")
         assert chat["to"] == "everyone" and chat["message"].startswith("Because you asked:") and len(chat["message"]) <= 500
+
+
+# ================= review B fixes =================
+def _events(client, meeting_id, event_type):
+    rt = client.app.state.runtime
+    return [e.payload for e in rt.store.events_since(meeting_id) if e.type == event_type]
+
+
+def _set_status(fake_recall, bot_id, code, sub_code=None):
+    fake_recall.bots[bot_id]["status_changes"].append({"code": code, "sub_code": sub_code})
+
+
+def test_bot_status_never_updates_and_meeting_never_ends_without_status_webhooks(lane_app, fake_recall):
+    """Review B item 2: status webhooks are dashboard-level at Recall, so the bot must be polled."""
+    client, lane = lane_app()
+    with client:
+        m = _launch(client).json()
+        bot, mid = m["recall_bot_id"], m["meeting_id"]
+        _set_status(fake_recall, bot, "in_waiting_room")
+        wait_for(lambda: client.get(f"/api/meetings/{mid}").json()["bot_status"] == "waiting_room")
+        _set_status(fake_recall, bot, "in_call_recording")
+        wait_for(lambda: client.get(f"/api/meetings/{mid}").json()["bot_status"] == "in_call")
+        _set_status(fake_recall, bot, "call_ended", "call_ended_by_host")
+        record = wait_for(lambda: (r := client.get(f"/api/meetings/{mid}").json())["ended_at"] and r)
+        assert record["bot_status"] == "left"
+        assert [s.status for s in _events(client, mid, "bot.status")] == ["joining", "waiting_room", "in_call", "left"]
+        assert [e.reason for e in _events(client, mid, "meeting.ended")] == ["call_ended"]
+        wait_for(lambda: lane.bot.watchers[mid].done())
+
+
+def test_status_arriving_by_webhook_and_by_poll_is_published_once(lane_app, fake_recall):
+    client, lane = lane_app()
+    with client:
+        m = _launch(client).json()
+        bot, mid = m["recall_bot_id"], m["meeting_id"]
+        _set_status(fake_recall, bot, "in_call_recording")
+        r = client.post(f"/webhooks/recall/{TOKEN}", json=fixture_body("bot_status_in_call_recording.json", bot))
+        assert r.status_code == 200
+        wait_for(lambda: client.get(f"/api/meetings/{mid}").json()["bot_status"] == "in_call")
+        time.sleep(0.3)   # several polls see in_call too
+        _set_status(fake_recall, bot, "call_ended")
+        for name in ("bot_status_call_ended.json", "bot_status_done.json"):
+            client.post(f"/webhooks/recall/{TOKEN}", json=fixture_body(name, bot))
+        wait_for(lambda: client.get(f"/api/meetings/{mid}").json()["ended_at"])
+        time.sleep(0.3)
+        assert [s.status for s in _events(client, mid, "bot.status")] == ["joining", "in_call", "left"]
+        assert len(_events(client, mid, "meeting.ended")) == 1
+
+
+def test_bot_that_dies_fatally_ends_the_meeting_as_bot_left(lane_app, fake_recall):
+    client, _ = lane_app()
+    with client:
+        m = _launch(client).json()
+        _set_status(fake_recall, m["recall_bot_id"], "fatal", "bot_kicked_from_waiting_room")
+        wait_for(lambda: client.get(f"/api/meetings/{m['meeting_id']}").json()["ended_at"])
+        assert [e.reason for e in _events(client, m["meeting_id"], "meeting.ended")] == ["bot_left"]
+        assert _events(client, m["meeting_id"], "bot.status")[-1].status == "failed"
+
+
+def test_recall_status_check_failing_shows_a_warning_and_keeps_polling(lane_app, fake_recall):
+    client, _ = lane_app()
+    with client:
+        m = _launch(client).json()
+        bot = m["recall_bot_id"]
+        fake_recall.fail[f"/bot/{bot}/"] = 502
+        wait_for(lambda: client.get("/api/health").json()["warnings"])
+        del fake_recall.fail[f"/bot/{bot}/"]
+        _set_status(fake_recall, bot, "in_call_recording")
+        wait_for(lambda: client.get(f"/api/meetings/{m['meeting_id']}").json()["bot_status"] == "in_call")
+        wait_for(lambda: client.get("/api/health").json()["warnings"] == [])
+
+
+def test_polling_stops_when_the_dashboard_ends_the_meeting(lane_app, fake_recall):
+    client, lane = lane_app()
+    with client:
+        m = _launch(client).json()
+        client.post(f"/api/meetings/{m['meeting_id']}/end")
+        wait_for(lambda: lane.bot.watchers[m["meeting_id"]].done())
+
+
+def test_health_cannot_tell_a_dead_pipe_from_a_quiet_room(lane_app):
+    """Review B item 8: every accepted webhook stamps rt.last_webhook_at; rejected ones do not."""
+    client, _ = lane_app()
+    with client:
+        m = client.post("/api/dev/meetings", json={"title": "t"}).json()
+        assert client.get("/api/health").json()["last_webhook_at"] is None
+        client.post("/webhooks/recall/wrong-token", json=fixture_body("transcript_data.json", m["recall_bot_id"]))
+        assert client.get("/api/health").json()["last_webhook_at"] is None
+        client.post(f"/webhooks/recall/{TOKEN}", json=fixture_body("transcript_partial_data.json", m["recall_bot_id"]))
+        first = client.get("/api/health").json()["last_webhook_at"]
+        assert first is not None
+        time.sleep(0.01)
+        client.post(f"/webhooks/recall/{TOKEN}", json=fixture_body("transcript_data.json", m["recall_bot_id"]))
+        assert client.get("/api/health").json()["last_webhook_at"] > first
+
+
+def test_panic_button_end_all_is_reachable_from_the_runtime(tmp_path, monkeypatch):
+    monkeypatch.setenv("RECALL_API_KEY", "fake-recall-key-for-tests")
+    recall = FakeRecall()
+    rt = make_rt(tmp_path, offline=True)
+    reg.install(rt, reg.MeetingLane(rt, recall_transport=recall.transport))
+    rt.store.create_meeting("live", "recall", MEET_URL, recall_bot_id="b_live")
+    recall.bots["b_live"] = {"id": "b_live", "bot_name": "Meet AGI", "status_changes": [{"code": "in_call_recording"}]}
+    told = asyncio.run(reg.lane_for(rt).bot.end_all())
+    assert told == ["b_live"] and "/api/v1/bot/b_live/leave_call/" in recall.paths("POST")

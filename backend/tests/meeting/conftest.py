@@ -112,7 +112,7 @@ def lane_app(lane_env, fake_recall, fake_inworld):
     def register_with_fakes(rt):
         built["lane"] = reg.install(rt, reg.MeetingLane(
             rt, recall_transport=fake_recall.transport, inworld_transport=fake_inworld.transport,
-            sleep=instant_sleep))
+            sleep=instant_sleep, poll_seconds=0.05))
 
     lane_env.setattr(main, "register_meeting_lane", register_with_fakes)
 
