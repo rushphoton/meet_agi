@@ -18,17 +18,30 @@
  * stream in chunks, which would make alerts appear late; on localhost the
  * bandwidth saving is irrelevant.
  *
+ * The live event stream (/api/meetings/{id}/events) is NOT forwarded by this
+ * rule: forwarding holds back the stream's opening until the backend sends its
+ * first event, so a quiet meeting would look "not connected" for up to 15 s.
+ * A small relay (src/app/api/meetings/[id]/events/route.ts) handles it and
+ * takes precedence over this rule.
+ *
  * The backend address is read when `npm run dev` or `npm run build` starts;
  * after changing NEXT_PUBLIC_API_BASE, restart dev or rebuild.
  */
 import type { NextConfig } from "next";
+import { backendBase } from "./src/lib/backendBase";
 
-const apiBase = (process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000").replace(/\/+$/, "");
+const apiBase = backendBase();
 
 const nextConfig: NextConfig = {
   compress: false,
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${apiBase}/api/:path*` }];
+    // "fallback" runs after the dashboard's own routes (including the dynamic
+    // live-stream relay); plain rewrites would run before dynamic routes and swallow it.
+    return {
+      beforeFiles: [],
+      afterFiles: [],
+      fallback: [{ source: "/api/:path*", destination: `${apiBase}/api/:path*` }],
+    };
   },
 };
 

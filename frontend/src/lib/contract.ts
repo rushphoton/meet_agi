@@ -16,6 +16,7 @@ type S = components["schemas"];
 
 export type MeetingRecord = S["MeetingRecord"];
 export type MeetingListItem = S["MeetingListItem"];
+export type CreateMeetingRequest = S["CreateMeetingRequest"];
 export type TranscriptSegment = S["TranscriptSegment"];
 export type Alert = S["Alert"];
 export type SpokenAnswer = S["SpokenAnswer"];

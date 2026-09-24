@@ -13,7 +13,7 @@
  *   "Failed to fetch" instead of "the backend isn't running - start it with ...".
  */
 import type {
-  DocumentInfo, FollowUp, FollowUpPatch, Health, MeetingEvent, MeetingListItem, MeetingRecord,
+  CreateMeetingRequest, DocumentInfo, FollowUp, FollowUpPatch, Health, MeetingEvent, MeetingListItem, MeetingRecord,
   MuteRequest, Ok, Settings, WakeRequest,
 } from "./contract";
 
@@ -58,7 +58,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit, fetchImpl: t
   if (!res.ok) {
     // The forwarding server answers 500 with an HTML page when the backend is down.
     const hint = res.status >= 500 && detailOf(body) === null ? ` ${BACKEND_HINT}` : "";
-    throw new ApiError(`${res.status}: ${detailOf(body) ?? (res.statusText || "request failed")}.${hint}`, res.status);
+    const reason = (detailOf(body) ?? (res.statusText || "request failed")).trim();
+    const stop = /[.!?]$/.test(reason) ? "" : ".";
+    throw new ApiError(`${res.status}: ${reason}${stop}${hint}`, res.status);
   }
   if (body === null && text) {
     throw new ApiError(`The backend sent something that isn't JSON (${path}). ${BACKEND_HINT}`, res.status);
@@ -74,6 +76,7 @@ const m = (id: string) => `/api/meetings/${encodeURIComponent(id)}`;
 export const api = {
   health: () => apiFetch<Health>("/api/health"),
   listMeetings: () => apiFetch<MeetingListItem[]>("/api/meetings"),
+  createMeeting: (body: CreateMeetingRequest) => apiFetch<MeetingRecord>("/api/meetings", json("POST", body)),
   getMeeting: (id: string) => apiFetch<MeetingRecord>(m(id)),
   endMeeting: (id: string) => apiFetch<MeetingRecord>(`${m(id)}/end`, { method: "POST" }),
   wake: (id: string, body: WakeRequest) => apiFetch<MeetingEvent>(`${m(id)}/wake`, json("POST", body)),

@@ -8,15 +8,19 @@
  *
  * FAILURE IT PREVENTS
  * Being unable to see why the bot posted something, or to silence it fast,
- * while the meeting is still going.
+ * while the meeting is still going. It also turns red when the bot is in the
+ * call but no transcript has arrived for over 30 s (a dead laptop, VPN or
+ * ngrok tunnel looks just like a quiet room otherwise).
  */
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AlertCard from "@/components/AlertCard";
 import AnswerList from "@/components/AnswerList";
 import Transcript from "@/components/Transcript";
 import { api, ApiError } from "@/lib/api";
+import { silenceSeconds } from "@/lib/silence";
+import { useHealth } from "@/lib/useHealth";
 import { useMeetingStream } from "@/lib/useMeetingStream";
 
 const STATUS_TEXT = {
@@ -33,6 +37,12 @@ export default function LivePage() {
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const { health } = useHealth(5000);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const record = state?.record;
   const flagged = useMemo(() => new Set(record?.alerts.flatMap((a) => a.segment_ids) ?? []), [record?.alerts]);
@@ -70,6 +80,18 @@ export default function LivePage() {
         {record.muted && <span className="badge alert">MUTED</span>}
         {" · "}<Link href={`/meetings/${record.meeting_id}`}>Open review</Link>
       </p>
+
+      {(() => {
+        const silent = silenceSeconds({
+          ended, botStatus: record.bot_status, lastSegmentAt: state.lastSegmentAt,
+          lastWebhookAt: health?.last_webhook_at, meetingStartedAt: record.started_at, nowMs: now,
+        });
+        return silent === null ? null : (
+          <div className="notice-danger" role="alert" data-testid="silence-warning">
+            No transcript for {silent} s - check the laptop, VPN and ngrok.
+          </div>
+        );
+      })()}
 
       <div className="panel">
         <div className="controls">

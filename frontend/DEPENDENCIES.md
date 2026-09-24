@@ -18,4 +18,9 @@ Removed from the scaffold on purpose:
 - **Tailwind.** Plain CSS (`src/app/globals.css`) is enough for three screens.
 - **Google web fonts** (`next/font/google`). They download fonts during the build, which fails without internet or behind the China firewall (risk R5). The dashboard uses the computer's own fonts instead.
 
-Infrastructure (also rule 4): `next.config.ts` forwards `/api/*` to `NEXT_PUBLIC_API_BASE` and turns off compression so the live stream isn't held back. The comment at the top of that file explains why.
+Infrastructure (also rule 4):
+
+- `next.config.ts` forwards `/api/*` to `NEXT_PUBLIC_API_BASE` and turns off compression so the live stream isn't held back.
+- The live stream itself goes through a small relay, `src/app/api/meetings/[id]/events/route.ts`. It costs one extra hop, and nothing new to install. Without it, the forwarding rule holds a quiet stream back for up to 15 s, so the live view says "Connecting..." when it is actually connected. It could go if the backend sent CORS headers and the browser read the stream directly.
+
+The comments at the top of both files explain why.

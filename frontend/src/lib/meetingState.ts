@@ -30,6 +30,8 @@ export interface LiveState {
   held: Record<number, MeetingEvent>;
   /** Wall-clock time each alert first arrived (for "fired at" on the live view). */
   alertAt: Record<string, string>;
+  /** Event time of the newest transcript line seen on the stream (for the "no transcript" warning). */
+  lastSegmentAt: string | null;
   wakeCount: number;
   stopCount: number;
   /** Messages that were dropped: duplicates, garbled, wrong meeting, or an event type this build doesn't know. */
@@ -48,6 +50,7 @@ export function initialState(record: MeetingRecord): LiveState {
     lastSeq: record.events_last_seq ?? 0,
     held: {},
     alertAt: {},
+    lastSegmentAt: null,
     wakeCount: 0,
     stopCount: 0,
     duplicates: 0,
@@ -146,7 +149,7 @@ function foldOne(state: LiveState, env: Envelope): LiveState {
       if (!r.participants.some((p) => p.speaker_id === seg.speaker_id)) {
         r.participants = [...r.participants, { speaker_id: seg.speaker_id, display_name: seg.speaker_name }];
       }
-      break;
+      return { ...advanced, record: r, lastSegmentAt: env.at || advanced.lastSegmentAt };
     }
     case "mute":
       r.muted = e.payload.muted;

@@ -30,6 +30,13 @@ describe("failure paths", () => {
     expect(err.message).toBe("404: No meeting x.");
   });
 
+  it("double full stop after a backend reason that already ends in one", async () => {
+    const err = await apiFetch<never>("/api/meetings", undefined,
+      fakeFetch(async () => Response.json({ detail: "A meeting is already live; end it first." }, { status: 409 })))
+      .catch((e: ApiError) => e);
+    expect(err.message).toBe("409: A meeting is already live; end it first.");
+  });
+
   it("validation errors (a list of problems) are joined into one sentence", async () => {
     const err = await apiFetch<never>("/api/settings", undefined,
       fakeFetch(async () => Response.json({ detail: [{ msg: "field required" }, { msg: "too long" }] }, { status: 422 })))

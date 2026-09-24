@@ -5,6 +5,7 @@
  * how many follow-ups are still outstanding or resolved, and then how many
  * alerts reached the room. Each row opens the review or the live view. It
  * refreshes itself every few seconds so a new meeting appears on its own.
+ * The form at the top sends the bot to a real Google Meet.
  *
  * FAILURE IT PREVENTS
  * Open follow-ups getting lost behind the more eye-catching alert count
@@ -12,6 +13,7 @@
  */
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import SendBotForm from "@/components/SendBotForm";
 import { api, ApiError } from "@/lib/api";
 import type { MeetingListItem } from "@/lib/contract";
 import { SESSION_COLUMNS, sessionRow } from "@/lib/format";
@@ -37,11 +39,12 @@ export default function SessionsPage() {
     <>
       <h1>Sessions</h1>
       <p className="sub">Every meeting Meet AGI has joined or replayed. Newest first.</p>
+      <SendBotForm />
       {error && <div className="error">{error}</div>}
       {items === null && !error && <p className="muted">Loading...</p>}
       {items && items.length === 0 && (
         <div className="panel">
-          No meetings yet. To see one, run the fake meeting: <code>python scripts/replay.py</code>
+          No meetings yet. Send the bot above, or run the fake meeting: <code>python scripts/replay.py</code>
         </div>
       )}
       {items && items.length > 0 && (
