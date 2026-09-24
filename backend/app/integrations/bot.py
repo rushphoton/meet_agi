@@ -9,9 +9,17 @@ Recall.ai (DESIGN.md §2 rows 1, 2, 5, 7, 10, 11):
   only lets a bot play audio later if it was given one at creation), and the
   consent notice posted to chat when it joins. Then records the meeting.
 - status(): asks Recall where the bot is now.
+- watch(): after launch, asks Recall every 3 s where the bot is and
+  publishes bot.status whenever it changes, and meeting.ended when Recall
+  says the call ended (review B item 2). Recall's status webhooks are set up
+  once in Recall's dashboard, not per bot, so without this the dashboard
+  would show "joining" forever and the meeting would never end by itself.
+  A status that arrives both by webhook and by polling is published once
+  (publish_status() compares with the meeting's current status).
 - leave(): tells the bot to leave the call (used by the dashboard's End).
 - end_all(): makes every bot we still think is in a call leave - the
-  "panic button" after a crash or a rehearsal.
+  "panic button" after a crash or a rehearsal. Reach it from the Runtime
+  with integrations.register.lane_for(rt).bot.end_all().
 
 Missing settings (RECALL_API_KEY, PUBLIC_BASE_URL, RECALL_WEBHOOK_TOKEN) stop
 launch() with a plain message naming the setting, never its value.
@@ -26,8 +34,10 @@ shows a clear error; no new packages.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
+from typing import Awaitable, Callable
 
 from fastapi import HTTPException
 
@@ -37,6 +47,9 @@ from ..providers.voice import silent_mp3
 from .recall_client import RecallError
 
 log = logging.getLogger("meet_agi.bot")
+POLL_SECONDS = 3.0
+RECALL_WARNING = "meeting.recall"
+ENDED_REASON = {"call_ended": "call_ended", "done": "call_ended", "fatal": "bot_left"}
 
 # Recall status codes -> the contract's BotStatus.status (DESIGN.md §4.3)
 STATUS_CODES = {
@@ -76,18 +89,45 @@ def build_create_bot_payload(meeting_url: str, settings: Settings, hook_url: str
     }
 
 
-def latest_status(bot: dict) -> str | None:
+def latest_code(bot: dict) -> tuple[str, str | None]:
     changes = bot.get("status_changes") or []
-    code = (changes[-1] or {}).get("code") if changes else (bot.get("status") or {}).get("code")
-    return STATUS_CODES.get(code or "")
+    last = (changes[-1] or {}) if changes else (bot.get("status") or {})
+    return str(last.get("code") or ""), last.get("sub_code")
+
+
+def latest_status(bot: dict) -> str | None:
+    return STATUS_CODES.get(latest_code(bot)[0])
+
+
+async def publish_status(rt, meeting_id: str, status: str, detail: str | None, bot_id: str | None,
+                         ended_reason: str | None) -> bool:
+    """Publish bot.status only if it differs from the meeting's current status, then
+    meeting.ended if the bot is gone. Shared by the webhook receiver and the poller,
+    so a status arriving by both routes is published once. Returns True if published."""
+    record = rt.store.get(meeting_id)
+    if record is None:
+        return False
+    published = False
+    if record.bot_status != status:
+        await rt.bus.publish(meeting_id, "bot.status",
+                             BotStatus(status=status, detail=detail, recall_bot_id=bot_id or None))
+        published = True
+    record = rt.store.get(meeting_id)
+    if status in ("left", "failed") and ended_reason and record and record.ended_at is None:
+        await rt.bus.publish(meeting_id, "meeting.ended", MeetingEnded(reason=ended_reason))
+    return published
 
 
 class BotLifecycle:
-    def __init__(self, rt, client, api_key_set: bool) -> None:
+    def __init__(self, rt, client, api_key_set: bool, poll_seconds: float = POLL_SECONDS,
+                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> None:
         self.rt = rt
         self.client = client
         self.api_key_set = api_key_set
+        self.poll_seconds = poll_seconds
+        self.sleep = sleep
         self.on_launch = None   # optional async callback(record) - used to warm the filler bank
+        self.watchers: dict[str, asyncio.Task] = {}
 
     def _missing(self) -> list[str]:
         missing = []
@@ -121,7 +161,34 @@ class BotLifecycle:
                                   BotStatus(status="joining", detail="bot created", recall_bot_id=bot_id))
         if self.on_launch is not None:
             await self.on_launch(record)
+        self.watchers[record.meeting_id] = asyncio.get_running_loop().create_task(
+            self.watch(record.meeting_id, bot_id))
         return self.rt.store.get(record.meeting_id)
+
+    async def watch(self, meeting_id: str, bot_id: str) -> None:
+        """Poll Recall until the bot has left or failed, or the meeting has ended."""
+        while True:
+            await self.sleep(self.poll_seconds)
+            record = self.rt.store.get(meeting_id)
+            if record is None or record.ended_at is not None:
+                return
+            try:
+                bot = await self.client.get_bot(bot_id)
+            except RecallError as exc:
+                self.rt.warnings[RECALL_WARNING] = "Recall bot status check failing - status may be stale"
+                log.warning("Bot status poll failed: %s", exc)
+                continue
+            self.rt.warnings.pop(RECALL_WARNING, None)
+            code, sub_code = latest_code(bot)
+            status = STATUS_CODES.get(code)
+            if status is None:
+                continue
+            try:
+                await publish_status(self.rt, meeting_id, status, sub_code, bot_id, ENDED_REASON.get(code))
+            except Exception:
+                log.exception("Publishing polled bot status failed for %s", meeting_id)
+            if status in ("left", "failed"):
+                return
 
     async def status(self, bot_id: str) -> str | None:
         try:

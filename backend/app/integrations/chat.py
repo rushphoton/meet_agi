@@ -8,6 +8,8 @@ into the Google Meet chat through Recall, one at a time and in order.
   chat_id: "sent", "suppressed_muted" or "failed" (DESIGN.md §4.3). Because it
   ignores every status but "pending", it never reacts to its own updates.
 - While the meeting is muted, nothing is posted ("suppressed_muted").
+- Once the meeting has ended, nothing is posted at all (for example after a
+  failed leave_call, or after the replay ended a real meeting).
 - Google Meet rejects chat messages over 500 characters (DESIGN.md §2 row 9).
   fit_chat() keeps every message under that, counting the way Meet's browser
   does (UTF-16 units, so an emoji counts as two), and cuts at a word boundary
@@ -89,7 +91,10 @@ class ChatPoster:
 
     async def _post(self, meeting_id: str, post: ChatPost) -> None:
         record = self.store.get(meeting_id)
-        if record is not None and record.muted:
+        if record is None or record.ended_at is not None:
+            log.info("Chat post %s dropped: the meeting has ended", post.chat_id)
+            return   # never post into a call the meeting has already left (review B, P2)
+        if record.muted:
             await self._publish(meeting_id, post, "suppressed_muted", post.text)
             return
         text = fit_chat(post.text)

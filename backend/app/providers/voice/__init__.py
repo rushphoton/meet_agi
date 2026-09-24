@@ -6,12 +6,15 @@ Turns text into an MP3 clip the bot can play into the meeting. Two voices:
   timeout (risk R5).
 - A CANNED sample clip (assets/canned_sample_clip.mp3). Its audio literally
   says "This is a canned sample clip, not the real voice. The voice service
-  is unavailable, so the answer is in the chat." It is used when OFFLINE=1,
-  when there is no INWORLD_API_KEY, when the meeting is the fake (replay)
-  meeting, and whenever Inworld fails.
+  is unavailable, so the answer is in the chat." It is used ONLY for the
+  fake (replay) meeting and when OFFLINE=1.
 
-VoiceService.synthesize() never raises: a broken voice vendor must not
-silence the chat answer or crash the meeting.
+For a real bot in a real call (allow_vendor=True) the canned clip is never
+played: a room full of people must not hear a clip announcing itself as
+canned (review B item 6). If Inworld is missing or fails, synthesize() raises
+VoiceError, the answer is marked "failed" (its chat line is posted anyway),
+and rt.warnings["meeting.voice"] says "Voice (Inworld) failing - answers go
+to chat only" until the next successful synthesis clears it.
 
 FAILURE IT PREVENTS
 The bot going quiet (or crashing) mid-demo because the voice vendor timed
@@ -104,27 +107,42 @@ class InworldVoice:
         return audio
 
 
-class VoiceService:
-    """Picks the real voice when allowed, and falls back to the canned clip (which says so)."""
+VOICE_WARNING_KEY = "meeting.voice"
+VOICE_WARNING = "Voice (Inworld) failing - answers go to chat only"
 
-    def __init__(self, inworld: InworldVoice | None, offline: bool, fallback_voice_id: str = "") -> None:
+
+class VoiceService:
+    """Real voice for a real call (or VoiceError); the canned clip only for replay/OFFLINE."""
+
+    def __init__(self, inworld: InworldVoice | None, offline: bool, fallback_voice_id: str = "",
+                 warnings: dict[str, str] | None = None) -> None:
         self.inworld = inworld
         self.offline = offline
         self.fallback_voice_id = fallback_voice_id
+        self.warnings = warnings if warnings is not None else {}
+
+    @property
+    def failing(self) -> bool:
+        return VOICE_WARNING_KEY in self.warnings
 
     @property
     def real_voice_available(self) -> bool:
         return self.inworld is not None and not self.offline
 
     async def synthesize(self, text: str, *, voice_id: str, model_id: str, allow_vendor: bool) -> VoiceClip:
+        """Raises VoiceError for a real call whose voice is missing or failing."""
         if self.offline:
             return canned_clip("OFFLINE=1")
-        if self.inworld is None:
-            return canned_clip("no INWORLD_API_KEY")
         if not allow_vendor:
             return canned_clip("fake meeting: no real audio destination")
+        if self.inworld is None:
+            self.warnings[VOICE_WARNING_KEY] = VOICE_WARNING
+            raise VoiceError("no INWORLD_API_KEY")
         try:
             audio = await self.inworld.synthesize(text, voice_id or self.fallback_voice_id, model_id)
         except VoiceError as exc:
-            return canned_clip(str(exc))
+            self.warnings[VOICE_WARNING_KEY] = VOICE_WARNING
+            log.warning("Voice failed for a real call; answer goes to chat only: %s", exc)
+            raise
+        self.warnings.pop(VOICE_WARNING_KEY, None)
         return VoiceClip(mp3=audio, duration=mp3_duration(audio), canned=False, provider="inworld")

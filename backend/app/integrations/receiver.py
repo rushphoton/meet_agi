@@ -19,7 +19,10 @@ events (DESIGN.md §3.3 "Hearing"):
    publish transcript.segment, and hand each sentence to the engine's single
    door, process_segment().
 6. When the bot leaves or fails: hand on any half-finished sentence first,
-   then publish meeting.ended.
+   then publish meeting.ended. For a real bot, a status already reported by
+   the poller in bot.py is not published twice.
+7. Note the time of every accepted webhook in rt.last_webhook_at, so
+   /api/health can tell a quiet room from a dead pipe (review B item 8).
 
 FAILURE IT PREVENTS
 Forged or duplicate lines; Recall giving up on us because we answered slowly
@@ -32,6 +35,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 
 from ..contract.context import MeetingContext
 from ..contract.events import BotStatus, MeetingEnded, TranscriptSegment
@@ -39,6 +43,7 @@ from ..core.ids import new_id
 from ..core.runtime import Runtime
 from ..pipeline import entry as engine_entry   # looked up at call time: the engine lane replaces its body
 from ..speech.assembler import SentenceAssembler, Sentence, Word
+from .bot import publish_status
 from .signature import recall_signature_valid, token_matches
 
 log = logging.getLogger("meet_agi.receiver")
@@ -71,6 +76,7 @@ class RecallReceiver:
     async def __call__(self, token: str, headers: dict, body: dict) -> int:
         if not token_matches(token, self.rt.config.recall_webhook_token):
             return 401
+        self.rt.last_webhook_at = datetime.now(timezone.utc)   # /api/health: "is the pipe alive?"
         self._check_signature(headers, body)
         if not isinstance(body, dict):
             return 200
@@ -149,13 +155,20 @@ class RecallReceiver:
     async def _status(self, meeting_id: str, status: str, data: dict) -> None:
         if status in ("left", "failed"):
             await self._emit(meeting_id, self._assembler(meeting_id).flush())
+        record = self.rt.store.get(meeting_id)
+        detail = (data.get("data") or {}).get("sub_code")
+        bot_id = str((data.get("bot") or {}).get("id") or "") or None
+        if record is not None and record.source == "recall":
+            # the poller (bot.py) may have reported this already: publish only a change
+            await publish_status(self.rt, meeting_id, status, detail, bot_id,
+                                 "call_ended" if status in ("left", "failed") else None)
+            return
+        # the fake (replay) meeting: unchanged since milestone 0
         await self.rt.bus.publish(meeting_id, "bot.status", BotStatus(
-            status=status, detail=(data.get("data") or {}).get("sub_code"),
-            recall_bot_id=str((data.get("bot") or {}).get("id") or "") or None))
+            status=status, detail=detail, recall_bot_id=bot_id))
         record = self.rt.store.get(meeting_id)
         if status in ("left", "failed") and record and record.ended_at is None:
-            await self.rt.bus.publish(meeting_id, "meeting.ended", MeetingEnded(
-                reason="replay_finished" if record.source == "replay" else "call_ended"))
+            await self.rt.bus.publish(meeting_id, "meeting.ended", MeetingEnded(reason="replay_finished"))
 
     async def _emit(self, meeting_id: str, sentences: list[Sentence]) -> None:
         record = self.rt.store.get(meeting_id)

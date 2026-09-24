@@ -7,7 +7,7 @@ import base64
 
 from backend.app.contract.events import ChatPost, Mute, SpokenAnswer, Stop, Wake
 from backend.app.integrations import register as reg
-from backend.app.providers.voice import CANNED_CLIP_TEXT, InworldVoice, VoiceService
+from backend.app.providers.voice import CANNED_CLIP_TEXT, InworldVoice, VoiceError, VoiceService
 from backend.app.integrations.fake_recall import FakeRecall
 from backend.tests.meeting.conftest import ROOT, FakeInworld, events_of, instant_sleep, make_rt, settle
 
@@ -53,35 +53,54 @@ def _audio_posts(recall):
 
 
 # ================= voice =================
-def test_inworld_server_error_falls_back_to_canned_clip_that_says_so():
+def test_voice_failure_in_a_real_call_raises_and_sets_the_voice_warning_never_canned():
     async def go():
-        voice = VoiceService(InworldVoice("k", transport=FakeInworld(status=500).transport), offline=False)
-        clip = await voice.synthesize("hello", voice_id="Grant", model_id="inworld-tts-2", allow_vendor=True)
-        assert clip.canned and clip.provider == "canned" and "500" in clip.note
-        assert "canned sample clip" in CANNED_CLIP_TEXT
-    asyncio.run(go())
-
-
-def test_inworld_timeout_or_bad_answer_falls_back_to_canned_clip():
-    async def go():
-        for fake in (FakeInworld(raise_timeout=True), FakeInworld(body={"nope": 1}),
+        for fake in (FakeInworld(status=500), FakeInworld(raise_timeout=True), FakeInworld(body={"nope": 1}),
                      FakeInworld(body={"audioContent": ""})):
-            voice = VoiceService(InworldVoice("k", transport=fake.transport), offline=False)
-            clip = await voice.synthesize("hi", voice_id="Grant", model_id="m", allow_vendor=True)
-            assert clip.canned
+            warnings = {}
+            voice = VoiceService(InworldVoice("k", transport=fake.transport), offline=False, warnings=warnings)
+            try:
+                await voice.synthesize("hi", voice_id="Grant", model_id="m", allow_vendor=True)
+                raise AssertionError("a failing voice in a real call must not return a clip")
+            except VoiceError:
+                pass
+            assert warnings == {"meeting.voice": "Voice (Inworld) failing - answers go to chat only"}
     asyncio.run(go())
 
 
-def test_offline_no_key_and_fake_meeting_never_call_inworld():
+def test_missing_inworld_key_in_a_real_call_is_a_voice_failure_not_a_canned_clip():
+    async def go():
+        warnings = {}
+        voice = VoiceService(None, offline=False, warnings=warnings)
+        try:
+            await voice.synthesize("x", voice_id="v", model_id="m", allow_vendor=True)
+            raise AssertionError("expected VoiceError")
+        except VoiceError:
+            pass
+        assert "meeting.voice" in warnings
+    asyncio.run(go())
+
+
+def test_replay_and_offline_keep_the_canned_clip_and_never_call_inworld():
     async def go():
         fake = FakeInworld()
-        cases = [VoiceService(InworldVoice("k", transport=fake.transport), offline=True),
-                 VoiceService(None, offline=False)]
-        for voice in cases:
-            assert (await voice.synthesize("x", voice_id="v", model_id="m", allow_vendor=True)).canned
+        offline = VoiceService(InworldVoice("k", transport=fake.transport), offline=True)
+        clip = await offline.synthesize("x", voice_id="v", model_id="m", allow_vendor=True)
+        assert clip.canned and "canned sample clip" in CANNED_CLIP_TEXT
         live = VoiceService(InworldVoice("k", transport=fake.transport), offline=False)
         assert (await live.synthesize("x", voice_id="v", model_id="m", allow_vendor=False)).canned
+        assert (await VoiceService(None, offline=False).synthesize("x", voice_id="v", model_id="m",
+                                                                     allow_vendor=False)).canned
         assert fake.calls == []
+    asyncio.run(go())
+
+
+def test_successful_synthesis_clears_the_voice_warning():
+    async def go():
+        warnings = {"meeting.voice": "Voice (Inworld) failing - answers go to chat only"}
+        voice = VoiceService(InworldVoice("k", transport=FakeInworld().transport), offline=False, warnings=warnings)
+        clip = await voice.synthesize("x", voice_id="v", model_id="m", allow_vendor=True)
+        assert not clip.canned and warnings == {}
     asyncio.run(go())
 
 
@@ -177,13 +196,53 @@ def test_recall_refusing_a_clip_marks_it_failed_and_the_next_still_plays(tmp_pat
     asyncio.run(go())
 
 
-def test_voice_failure_plays_the_canned_clip_instead_of_silence(tmp_path, monkeypatch):
+def test_voice_outage_in_a_real_call_does_not_play_the_canned_clip_to_the_room(tmp_path, monkeypatch):
     async def go():
-        rt, lane, recall, _, mid = _lane(tmp_path, monkeypatch, inworld=FakeInworld(status=503))
-        await rt.bus.publish(mid, "spoken.answer", _answer())
+        inworld = FakeInworld(status=503)
+        rt, lane, recall, _, mid = _lane(tmp_path, monkeypatch, inworld=inworld)
+        await rt.bus.publish(mid, "wake", Wake(trigger="button"))
+        await rt.bus.publish(mid, "spoken.answer", _answer("ans_1"))
         await settle()
-        assert _audio_posts(recall) == [CANNED_B64]
-        assert _statuses(rt, mid, "ans_1")[-1] == "played"
+        assert _audio_posts(recall) == []                               # nothing played, never the canned clip
+        assert _statuses(rt, mid, "ans_1") == ["queued", "failed"]
+        assert rt.warnings["meeting.voice"] == "Voice (Inworld) failing - answers go to chat only"
+        calls_before = len(inworld.calls)
+        await rt.bus.publish(mid, "wake", Wake(trigger="button"))      # while down: filler skipped, no wait
+        await settle()
+        assert len(inworld.calls) == calls_before
+        inworld.status = 200                                             # voice comes back
+        await rt.bus.publish(mid, "spoken.answer", _answer("ans_2"))
+        await settle()
+        assert _statuses(rt, mid, "ans_2") == ["queued", "playing", "played"]
+        assert CANNED_B64 not in _audio_posts(recall) and len(_audio_posts(recall)) == 1
+        assert "meeting.voice" not in rt.warnings
+    asyncio.run(go())
+
+
+def test_ended_meeting_gets_no_audio_even_if_a_clip_was_being_prepared(tmp_path, monkeypatch):
+    async def go():
+        from backend.app.contract.events import MeetingEnded
+        rt, lane, recall, _, mid = _lane(tmp_path, monkeypatch)
+        await rt.bus.publish(mid, "meeting.ended", MeetingEnded(reason="dashboard"))
+        await rt.bus.publish(mid, "wake", Wake(trigger="button"))
+        await rt.bus.publish(mid, "spoken.answer", _answer("ans_1"))
+        await settle()
+        assert _audio_posts(recall) == []
+        assert _statuses(rt, mid, "ans_1") == ["queued", "stopped"]
+    asyncio.run(go())
+
+
+def test_chat_keeps_posting_into_a_meeting_that_has_ended(tmp_path, monkeypatch):
+    """Symptom from review B: after a failed leave, or the replay ending a real meeting,
+    the bot kept posting alerts in the Meet. Now nothing is posted once the meeting ended."""
+    async def go():
+        from backend.app.contract.events import MeetingEnded
+        rt, lane, recall, _, mid = _lane(tmp_path, monkeypatch)
+        await rt.bus.publish(mid, "meeting.ended", MeetingEnded(reason="dashboard"))
+        await rt.bus.publish(mid, "chat.post", _post())
+        await settle()
+        assert not any(p.endswith("/send_chat_message/") for p in recall.paths())
+        assert _chat_statuses(rt, mid, "chat_1") == ["pending"]
     asyncio.run(go())
 
 
