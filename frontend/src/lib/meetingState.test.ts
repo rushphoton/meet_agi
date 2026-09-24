@@ -153,6 +153,14 @@ describe("folding the stream", () => {
     expect(s.record.follow_ups).toEqual([fu]);
   });
 
+  it("remembers when the last transcript line arrived, and a resent old line doesn't refresh it", () => {
+    const old = { ...seg(1), at: "2026-09-24T10:00:01Z" };
+    let s = applyEvents(initialState(record()), [old, { ...seg(2), at: "2026-09-24T10:00:09Z" }, alert(3)]);
+    expect(s.lastSegmentAt).toBe("2026-09-24T10:00:09Z");
+    s = applyEvent(s, { ...old, at: "2026-09-24T10:05:00Z" });
+    expect(s.lastSegmentAt).toBe("2026-09-24T10:00:09Z");
+  });
+
   it("gated alerts don't count as alerts in the room", () => {
     const s = applyEvents(initialState(record()), [alert(1), alert(2, { alert_id: "alr_2", gated: true })]);
     expect(visibleAlertCount(s.record)).toBe(1);
