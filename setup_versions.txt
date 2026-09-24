@@ -1,0 +1,12 @@
+﻿git | git version 2.48.1.windows.1
+python(py -3.12) | NOT FOUND
+python(on PATH) | Python 3.13.2
+python path | C:\Users\YBBJ100572\AppData\Local\Programs\Python\Python313\python.exe
+node | v22.12.0
+npm | 10.9.0
+gh | gh version 2.97.0 (2026-07-31)
+claude | 2.1.281 (Claude Code)
+claude path | C:\Users\YBBJ100572\.local\bin\claude.exe
+ngrok | NOT FOUND
+core.longpaths | true
+winget | NOT FOUND

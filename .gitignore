@@ -1,0 +1,46 @@
+# Secrets - never committed (CLAUDE.md rule 9)
+.env
+.env.*
+!.env.example
+
+# Claude Code: per-lane worktrees and local hook state
+.claude/worktrees/
+.claude/hook_state/
+.claude/settings.local.json
+
+# Local tool binaries (ngrok.exe, 33 MB) - downloaded per machine, not source
+tools/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# NOTE: reviews/ is deliberately NOT ignored - review reports are committed.
+publish_result.txt
