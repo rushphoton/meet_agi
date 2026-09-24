@@ -1,0 +1,4 @@
+# Generated contract files: always LF so the drift check compares like with like on Windows.
+contract/openapi.json text eol=lf
+frontend/src/contract/*.ts text eol=lf
+*.py text eol=lf

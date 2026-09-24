@@ -44,3 +44,10 @@ Thumbs.db
 
 # NOTE: reviews/ is deliberately NOT ignored - review reports are committed.
 publish_result.txt
+
+# Meet AGI runtime data (meeting JSON files, settings) - local only
+data/
+# Documents stay on this computer, except the committed samples
+knowledge/*
+!knowledge/README.md
+!knowledge/SAMPLE_*

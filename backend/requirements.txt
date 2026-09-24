@@ -1,0 +1,16 @@
+# Each dependency: what it costs / what breaks without it / what would justify changing it (CLAUDE.md rule 4).
+# All are free, open-source, installed into .venv by scripts/_bootstrap.py.
+#
+# fastapi: the web framework; generates the API description (OpenAPI) the dashboard's types come from.
+#   Without it: hand-written routing and hand-written types. Replace only if we leave Python.
+fastapi==0.141.1
+# uvicorn: the server that runs the FastAPI app. Without it nothing listens on port 8000.
+uvicorn==0.53.0
+# pydantic: data-shape definitions and validation (comes with FastAPI; pinned so shapes don't shift).
+pydantic==2.13.5
+# python-multipart: lets the settings screen upload documents. Without it: upload endpoint fails to load.
+python-multipart==0.0.32
+# httpx: HTTP client for the replay script and tests (and later vendor calls). Without it: urllib boilerplate.
+httpx==0.28.1
+# pytest: runs the tests. Without it: no automated proof.
+pytest==9.1.1

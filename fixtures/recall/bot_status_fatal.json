@@ -1,0 +1,7 @@
+{
+  "event": "bot.fatal",
+  "data": {
+    "data": {"code": "fatal", "sub_code": "bot_kicked_from_waiting_room", "updated_at": "2026-09-24T10:00:00.000000Z"},
+    "bot": {"id": "bot_00000000-0000-0000-0000-000000000001", "metadata": {}}
+  }
+}

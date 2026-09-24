@@ -1,0 +1,167 @@
+{
+ "_about": "SCRIPTED FAKE MEETING (not a real recording). A 3-minute Q3 revenue review with four speakers. Replayed through the real backend by scripts/replay.py as Recall-shaped webhooks. Times are seconds from the start of the call.",
+ "title": "Q3 revenue review (fake meeting)",
+ "duration_seconds": 180,
+ "speakers": [
+  {
+   "participant_id": 101,
+   "name": "Dana Lee",
+   "role": "CFO"
+  },
+  {
+   "participant_id": 102,
+   "name": "Marcus Chen",
+   "role": "Head of Sales"
+  },
+  {
+   "participant_id": 103,
+   "name": "Priya Nair",
+   "role": "FP&A Lead"
+  },
+  {
+   "participant_id": 104,
+   "name": "Tom Walsh",
+   "role": "CEO"
+  }
+ ],
+ "lines": [
+  {
+   "t": 0,
+   "participant_id": 104,
+   "text": "Okay, let's get started with the quarterly revenue review."
+  },
+  {
+   "t": 6,
+   "participant_id": 101,
+   "text": "Thanks Tom. I'll walk through the headline numbers first, then Marcus can cover pipeline."
+  },
+  {
+   "t": 14,
+   "participant_id": 101,
+   "text": "Total bookings for the quarter came in at fifty two million."
+  },
+  {
+   "t": 21,
+   "participant_id": 104,
+   "text": "That's slightly ahead of plan, right?"
+  },
+  {
+   "t": 25,
+   "participant_id": 101,
+   "text": "About two percent ahead, yes."
+  },
+  {
+   "t": 31,
+   "participant_id": 102,
+   "text": "The enterprise segment drove most of that, especially the two renewals in September."
+  },
+  {
+   "t": 40,
+   "participant_id": 103,
+   "text": "Churn stayed flat at around three percent, which is in line with the model."
+  },
+  {
+   "t": 48,
+   "participant_id": 102,
+   "text": "And honestly the momentum is great. Q3 revenue was rising, up about three percent on Q2."
+  },
+  {
+   "t": 58,
+   "participant_id": 103,
+   "text": "Hmm, I'm not sure that's right, I remember it being lower."
+  },
+  {
+   "t": 64,
+   "participant_id": 104,
+   "text": "Let's not get stuck on it, we can check after."
+  },
+  {
+   "t": 70,
+   "participant_id": 101,
+   "text": "Moving on, gross margin improved to sixty one percent."
+  },
+  {
+   "t": 78,
+   "participant_id": 104,
+   "text": "What drove the margin improvement?"
+  },
+  {
+   "t": 83,
+   "participant_id": 101,
+   "text": "Mostly lower hosting costs after the migration."
+  },
+  {
+   "t": 91,
+   "participant_id": 103,
+   "text": "Quick side note, the bot we added answers when you say hey AGI, so be careful."
+  },
+  {
+   "t": 100,
+   "participant_id": 102,
+   "text": "Good to know."
+  },
+  {
+   "t": 104,
+   "participant_id": 104,
+   "text": "Hey AGI, what was Q3 revenue according to the board deck?"
+  },
+  {
+   "t": 120,
+   "participant_id": 104,
+   "text": "Okay, so it actually fell. Dana, can you reconcile that with the bookings number?"
+  },
+  {
+   "t": 128,
+   "participant_id": 101,
+   "text": "Yes, bookings lead revenue by a quarter, so the dip reflects Q2 bookings."
+  },
+  {
+   "t": 137,
+   "participant_id": 102,
+   "text": "Fair enough, my mistake on the direction."
+  },
+  {
+   "t": 142,
+   "participant_id": 104,
+   "text": "Marcus, what does the Q4 pipeline look like?"
+  },
+  {
+   "t": 148,
+   "participant_id": 102,
+   "text": "Pipeline is about ninety million, with thirty million in late stage."
+  },
+  {
+   "t": 156,
+   "participant_id": 103,
+   "text": "I'll update the forecast model with the new late-stage numbers by Friday."
+  },
+  {
+   "t": 163,
+   "participant_id": 104,
+   "text": "Great. Dana, please send the reconciled revenue bridge to the board."
+  },
+  {
+   "t": 170,
+   "participant_id": 101,
+   "text": "Will do."
+  },
+  {
+   "t": 175,
+   "participant_id": 104,
+   "text": "Thanks everyone, let's wrap up."
+  }
+ ],
+ "planted": {
+  "contradiction_line": 7,
+  "contradiction_note": "Marcus says Q3 revenue was rising; knowledge/SAMPLE_board_deck_q3.md says it fell 4%. Priya's doubt (line 8) is the uncertainty signal.",
+  "wake_mention_line": 13,
+  "wake_mention_note": "Talks ABOUT the wake word - must NOT trigger speech mode.",
+  "wake_question_line": 15
+ },
+ "expected": {
+  "alerts": 1,
+  "spoken_answers": 1,
+  "meeting_summaries": 1,
+  "wake_events": 1
+ }
+}

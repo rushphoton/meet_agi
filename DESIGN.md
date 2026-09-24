@@ -1,6 +1,6 @@
 # Meet AGI — Design
 
-Status: design frozen for milestone 0 (24 Sep 2026). Owner: Ray. Changes to this file and to the contract happen only on `main`, in the integrate step (CLAUDE.md rules 3 and 10).
+Status: design frozen for milestone 0 (24 Sep 2026); contract as built at milestone 0 (tag `milestone-0`). Owner: Ray. Changes to this file and to the contract happen only on `main`, in the integrate step (CLAUDE.md rules 3 and 10).
 
 ---
 
@@ -95,7 +95,7 @@ A **recorder** writes each meeting to one JSON file as it happens. The dashboard
 | Voice provider | `backend/app/providers/voice/` | meeting lane | Inworld TTS, plus a canned sample-clip provider that says it is canned |
 | Dashboard | `frontend/` (Next.js, App Router, TypeScript) | screens lane | Settings, live view, review |
 | Generated client | `frontend/src/contract/` | generated only | `openapi-typescript` output from `contract/openapi.json`; never hand-edited |
-| Fake meeting | `fixtures/`, `backend/app/dev/replay.py` | milestone 0 | Scripted conversation replayed through the real receiver |
+| Fake meeting | `fixtures/`, `backend/app/dev/fake_meeting.py`, `scripts/replay.py` | milestone 0 | Scripted conversation replayed through the real receiver |
 
 ### 3.3 Flows
 
@@ -204,7 +204,7 @@ Event {
 | `wake` | `Wake` | `trigger: "phrase"\|"button"`, `segment_id: str\|None`, `matched_variant: str\|None`, `question: str\|None` | engine (phrase), API (button) |
 | `stop` | `Stop` | `trigger: "phrase"\|"button"`, `segment_id: str\|None` | engine / API |
 | `mute` | `Mute` | `muted: bool`, `by: "dashboard"` | API |
-| `alert` | `Alert` | `alert_id`, `kind: "contradiction"\|"disagreement"\|"uncertainty"`, `topic: str` (≤60 chars, fills "Because you mentioned ___"), `claim: str`, `said_by: list[str]`, `segment_ids: list[str]`, `finding: str`, `evidence: list[Evidence]`, `reasoning: str` (full, unbounded), `confidence: float 0-1`, `gated: bool`, `gate_reason: str\|None`, `delivered_to_chat: bool`, `models_used: list[str]` | engine |
+| `alert` | `Alert` | `alert_id`, `kind: "contradiction"\|"disagreement"\|"uncertainty"`, `topic: str` (≤60 chars, fills "Because you mentioned ___"), `claim: str`, `said_by: list[str]`, `segment_ids: list[str]`, `finding: str`, `evidence: list[Evidence]`, `reasoning: str` (full, unbounded), `confidence: float 0-1`, `gated: bool`, `gate_reason: str\|None`, `delivered_to_chat: bool`, `models_used: list[str]`, `canned: bool` | engine |
 | `spoken.answer` | `SpokenAnswer` | `answer_id`, `question: str`, `asked_by: str\|None`, `text: str` (≤60 words), `evidence: list[Evidence]`, `status: "queued"\|"playing"\|"played"\|"stopped"\|"muted"\|"failed"`, `canned: bool` | engine (queued) / meeting (status updates as new events with the same `answer_id`) |
 | `chat.post` | `ChatPost` | `chat_id`, `text: str` (≤500, enforced), `reason: "alert"\|"answer"\|"consent"\|"system"`, `ref_id: str\|None`, `status: "pending"\|"sent"\|"suppressed_muted"\|"failed"` | engine (pending) / meeting (result) |
 | `follow_up` | `FollowUp` | `follow_up_id`, `text: str`, `owner: str\|None`, `source_alert_id: str\|None`, `status: "outstanding"\|"resolved"` | engine at end; API on toggle |
@@ -215,7 +215,7 @@ Event {
 
 ### 4.4 Records and API shapes
 
-- `MeetingRecord` = `{meeting_id, title, meeting_url, started_at, ended_at|None, participants: list[Participant], segments: list[TranscriptSegment], alerts: list[Alert], answers: list[SpokenAnswer], chat_posts: list[ChatPost], follow_ups: list[FollowUp], summary: MeetingSummary|None, events_last_seq: int}`. This is what the JSON file holds.
+- `MeetingRecord` = `{meeting_id, title, meeting_url, source: "recall"|"replay", recall_bot_id|None, bot_status|None, muted: bool, started_at, ended_at|None, participants: list[Participant], segments: list[TranscriptSegment], alerts: list[Alert], answers: list[SpokenAnswer], chat_posts: list[ChatPost], follow_ups: list[FollowUp], summary: MeetingSummary|None, events_last_seq: int}`. This is what the JSON file holds.
 - `Participant` = `{speaker_id, recall_name|None, display_name, role|None}`
 - `MeetingListItem` = `{meeting_id, title, started_at, participants: list[str], follow_ups_outstanding: int, follow_ups_resolved: int, alert_count: int}`. The field order is the display order.
 - `Settings` = `{bot_name: "Meet AGI", consent_text, speakers: list[SpeakerMapping{match_name, display_name, role|None}], models: {cheap_check, judge, answer, summary}, voice: {provider:"inworld", model, voice_id}, gate: {cheap_threshold, min_confidence, cooldown_seconds, max_alerts_per_meeting}, wake: {variants: list[str], max_word_position: int, question_wait_seconds: int}, stop_variants: list[str], answer_max_words: int, fillers: list[str]}`
@@ -231,7 +231,11 @@ async def process_segment(segment: TranscriptSegment, ctx: MeetingContext) -> No
 - `MeetingContext` = `{meeting_id, settings: Settings, bus: EventBus, store: Store, muted: bool, speech_mode: bool}`. It lives in `backend/app/contract/context.py`.
 - The engine responds only by publishing events.
 - Manual wake, stop button, mute and meeting-end reach the engine through bus subscriptions set up in its own registration module (§5).
-- Milestone 0 ships a placeholder that publishes nothing except a `chat.post` with `status:"suppressed_muted"` and the text `PLACEHOLDER ENGINE: received "<first 40 chars>"`, visible in the dashboard only.
+- Milestone 0 ships a placeholder:
+  - One CANNED `alert` plus its `chat.post` when a sentence claims Q3 revenue was rising.
+  - One CANNED `wake`, `spoken.answer` and `chat.post` when a sentence starts with "Hey AGI", or when the manual wake button is pressed.
+  - One CANNED `meeting.summary` at meeting end.
+  - Everything it emits has `canned: true` or "CANNED" in its text.
 
 ### 4.5 Wake and stop detection (part of the contract's behavior, used by the tests)
 
@@ -247,9 +251,9 @@ async def process_segment(segment: TranscriptSegment, ctx: MeetingContext) -> No
 
 | Method | Path | Body → Response | Purpose |
 |---|---|---|---|
-| GET | `/api/health` | → `{ok, placeholders: list[str]}` | Liveness; lists anything still canned |
+| GET | `/api/health` | → `{ok, offline, dev_mode, placeholders: list[str]}` | Liveness; lists anything still canned |
 | GET | `/api/meetings` | → `list[MeetingListItem]` | Sessions list |
-| POST | `/api/meetings` | `{meeting_url, title?}` → `MeetingRecord` | Send the bot |
+| POST | `/api/meetings` | `{meeting_url, title?}` → `MeetingRecord` | Send the bot (501 "not built yet" until the meeting lane fills `rt.launch_bot`) |
 | GET | `/api/meetings/{id}` | → `MeetingRecord` | Review screen |
 | POST | `/api/meetings/{id}/end` | → `MeetingRecord` | Bot leaves; triggers summary |
 | POST | `/api/meetings/{id}/wake` | `{question?}` → `Event` | Manual wake |
@@ -262,8 +266,8 @@ async def process_segment(segment: TranscriptSegment, ctx: MeetingContext) -> No
 | POST | `/api/documents` | multipart file → `DocumentInfo` | Accepts `.md .txt .pdf` |
 | DELETE | `/api/documents/{name}` | → `{ok}` | |
 | GET | `/api/contract/events` | → `Event` | Schema exposure only |
-| POST | `/api/dev/replay` | `{fixture:"fake_meeting", speed: float=10}` → `MeetingRecord` | Fake meeting; disabled unless `DEV_MODE=1` |
-| POST | `/webhooks/recall/{token}` | Recall payload → 200 `{ok:true}` | Receiver |
+| POST | `/api/dev/meetings` | `{title}` → `MeetingRecord` (with a `replay-…` bot id) | Creates a fake-meeting record; `scripts/replay.py` then posts Recall-shaped webhooks to the receiver. 404 unless `DEV_MODE=1` |
+| POST | `/webhooks/recall/{token}` | Recall payload → 200 `{ok:true}` | Receiver; the route calls `rt.recall_webhook` (meeting lane) |
 
 ---
 
@@ -271,12 +275,14 @@ async def process_segment(segment: TranscriptSegment, ctx: MeetingContext) -> No
 
 | Lane | Owns (may edit) | Must not edit | Registers itself in | Proves itself with |
 |---|---|---|---|---|
-| **engine** (`lane-engine`) | `backend/app/pipeline/`, `backend/app/knowledge/`, `backend/app/providers/llm/`, their tests under `backend/tests/engine/` | everything else, esp. `main.py`, `settings.py`, `contract/`, `core/` | `backend/app/pipeline/register.py` → `def register(bus: EventBus, store: Store, settings_getter) -> None` | `python -m pytest backend/tests/engine` including `test_fake_meeting_produces_exactly_one_alert_one_answer_one_summary` |
-| **meeting** (`lane-meeting`) | `backend/app/integrations/`, `backend/app/speech/`, `backend/app/providers/voice/`, tests under `backend/tests/meeting/` | same | `backend/app/integrations/register.py` → `def register(app_router: APIRouter, bus, store, settings_getter) -> None` | `python -m pytest backend/tests/meeting` against `fixtures/recall/` and the fake Recall |
+| **engine** (`lane-engine`) | `backend/app/pipeline/`, `backend/app/knowledge/`, `backend/app/providers/llm/`, their tests under `backend/tests/engine/` | everything else, esp. `main.py`, `api.py`, `settings.py`, `contract/`, `core/` | `backend/app/pipeline/register.py` → `def register(rt: Runtime) -> None` (subscribe on `rt.bus`) | `python -m pytest backend/tests/engine` including `test_fake_meeting_produces_exactly_one_alert_one_answer_one_summary` |
+| **meeting** (`lane-meeting`) | `backend/app/integrations/`, `backend/app/speech/`, `backend/app/providers/voice/`, tests under `backend/tests/meeting/` | same | `backend/app/integrations/register.py` → `def register(rt: Runtime) -> None` (fills slots `rt.recall_webhook`, `rt.launch_bot`, `rt.end_bot`; subscribes on `rt.bus`) | `python -m pytest backend/tests/meeting` against `fixtures/recall/` and the fake Recall |
 | **screens** (`lane-screens`) | `frontend/` except `frontend/src/contract/` | backend, generated client | `frontend/src/app/…` routes | `npm --prefix frontend run verify` (typecheck + tests + build) and 3 URLs on the replay |
-| **integrate** (orchestrator, on `main`) | `backend/app/main.py`, `backend/app/settings.py`, `backend/app/contract/`, `backend/app/core/`, `backend/app/dev/`, `contract/`, `frontend/src/contract/`, `scripts/`, `fixtures/`, root files, DESIGN.md, STATE.md | lane internals (except to merge) | calls each lane's `register` | `python scripts/verify.py` |
+| **integrate** (orchestrator, on `main`) | `backend/app/main.py`, `backend/app/api.py`, `backend/app/settings.py`, `backend/app/contract/`, `backend/app/core/`, `backend/app/dev/`, `contract/`, `frontend/src/contract/`, `scripts/`, `fixtures/`, root files, DESIGN.md, STATE.md | lane internals (except to merge) | calls each lane's `register` | `python scripts/verify.py` |
 
-Lanes may read anything. The milestone-0 skeleton creates each `register.py` with a no-op body, so every lane only fills in a file it already owns.
+Lanes may read anything. The milestone-0 skeleton creates each `register.py` with a placeholder body, so every lane only fills in a file it already owns.
+
+`Runtime` (`backend/app/core/runtime.py`) carries `bus`, `store`, `config`, `get_settings()` and the slots. Every REST route lives in `api.py` and calls a slot. A lane never adds a route, so the API description only changes on `main`. `rt.placeholders` names whatever is still canned; `/api/health` shows the list.
 
 ---
 

@@ -1,0 +1,7 @@
+{
+  "event": "bot.joining_call",
+  "data": {
+    "data": {"code": "joining_call", "sub_code": null, "updated_at": "2026-09-24T10:00:00.000000Z"},
+    "bot": {"id": "bot_00000000-0000-0000-0000-000000000001", "metadata": {}}
+  }
+}

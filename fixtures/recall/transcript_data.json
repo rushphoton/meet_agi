@@ -1,0 +1,26 @@
+{
+  "event": "transcript.data",
+  "data": {
+    "data": {
+      "words": [
+        {"text": "Q3", "start_timestamp": {"relative": 48.0}, "end_timestamp": {"relative": 48.3}},
+        {"text": "revenue", "start_timestamp": {"relative": 48.3}, "end_timestamp": {"relative": 48.7}},
+        {"text": "was", "start_timestamp": {"relative": 48.7}, "end_timestamp": {"relative": 48.9}},
+        {"text": "rising.", "start_timestamp": {"relative": 48.9}, "end_timestamp": {"relative": 49.4}}
+      ],
+      "language_code": "en",
+      "participant": {
+        "id": 102,
+        "name": "Marcus Chen",
+        "is_host": false,
+        "platform": "desktop",
+        "extra_data": null,
+        "email": null
+      }
+    },
+    "realtime_endpoint": {"id": "rte_00000000-0000-0000-0000-000000000001", "metadata": {}},
+    "transcript": {"id": "trn_00000000-0000-0000-0000-000000000001", "metadata": {}},
+    "recording": {"id": "rec_00000000-0000-0000-0000-000000000001", "metadata": {}},
+    "bot": {"id": "bot_00000000-0000-0000-0000-000000000001", "metadata": {}}
+  }
+}

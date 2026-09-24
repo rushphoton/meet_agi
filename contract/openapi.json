@@ -1,0 +1,2586 @@
+{
+  "components": {
+    "schemas": {
+      "Alert": {
+        "additionalProperties": false,
+        "properties": {
+          "alert_id": {
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "canned": {
+            "default": false,
+            "title": "Canned",
+            "type": "boolean"
+          },
+          "claim": {
+            "title": "Claim",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "delivered_to_chat": {
+            "title": "Delivered To Chat",
+            "type": "boolean"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "finding": {
+            "title": "Finding",
+            "type": "string"
+          },
+          "gate_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gate Reason"
+          },
+          "gated": {
+            "title": "Gated",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "contradiction",
+              "disagreement",
+              "uncertainty"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "models_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models Used",
+            "type": "array"
+          },
+          "reasoning": {
+            "title": "Reasoning",
+            "type": "string"
+          },
+          "said_by": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Said By",
+            "type": "array"
+          },
+          "segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Segment Ids",
+            "type": "array"
+          },
+          "topic": {
+            "maxLength": 60,
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alert_id",
+          "kind",
+          "topic",
+          "claim",
+          "said_by",
+          "segment_ids",
+          "finding",
+          "evidence",
+          "reasoning",
+          "confidence",
+          "gated",
+          "delivered_to_chat",
+          "models_used"
+        ],
+        "title": "Alert",
+        "type": "object"
+      },
+      "AlertEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Alert"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "alert",
+            "default": "alert",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "AlertEvent",
+        "type": "object"
+      },
+      "Body_upload_document_api_documents_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_document_api_documents_post",
+        "type": "object"
+      },
+      "BotStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "recall_bot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recall Bot Id"
+          },
+          "status": {
+            "enum": [
+              "joining",
+              "waiting_room",
+              "in_call",
+              "left",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "BotStatus",
+        "type": "object"
+      },
+      "BotStatusEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/BotStatus"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "bot.status",
+            "default": "bot.status",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "BotStatusEvent",
+        "type": "object"
+      },
+      "ChatPost": {
+        "additionalProperties": false,
+        "properties": {
+          "chat_id": {
+            "title": "Chat Id",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "alert",
+              "answer",
+              "consent",
+              "system"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "ref_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Id"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "sent",
+              "suppressed_muted",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 500,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chat_id",
+          "text",
+          "reason",
+          "status"
+        ],
+        "title": "ChatPost",
+        "type": "object"
+      },
+      "ChatPostEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ChatPost"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "chat.post",
+            "default": "chat.post",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "ChatPostEvent",
+        "type": "object"
+      },
+      "CreateMeetingRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "meeting_url": {
+            "title": "Meeting Url",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "meeting_url"
+        ],
+        "title": "CreateMeetingRequest",
+        "type": "object"
+      },
+      "DocumentInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "added_at": {
+            "format": "date-time",
+            "title": "Added At",
+            "type": "string"
+          },
+          "chunks": {
+            "title": "Chunks",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "size_bytes",
+          "chunks",
+          "added_at"
+        ],
+        "title": "DocumentInfo",
+        "type": "object"
+      },
+      "Evidence": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "title": "Document",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator"
+          },
+          "passage": {
+            "maxLength": 400,
+            "title": "Passage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document",
+          "passage"
+        ],
+        "title": "Evidence",
+        "type": "object"
+      },
+      "FollowUp": {
+        "additionalProperties": false,
+        "properties": {
+          "follow_up_id": {
+            "title": "Follow Up Id",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "source_alert_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Alert Id"
+          },
+          "status": {
+            "enum": [
+              "outstanding",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "follow_up_id",
+          "text",
+          "status"
+        ],
+        "title": "FollowUp",
+        "type": "object"
+      },
+      "FollowUpEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/FollowUp"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "follow_up",
+            "default": "follow_up",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "FollowUpEvent",
+        "type": "object"
+      },
+      "FollowUpPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "outstanding",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "FollowUpPatch",
+        "type": "object"
+      },
+      "GateSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "cheap_threshold": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Cheap Threshold",
+            "type": "number"
+          },
+          "cooldown_seconds": {
+            "default": 90,
+            "minimum": 0.0,
+            "title": "Cooldown Seconds",
+            "type": "integer"
+          },
+          "max_alerts_per_meeting": {
+            "default": 8,
+            "minimum": 0.0,
+            "title": "Max Alerts Per Meeting",
+            "type": "integer"
+          },
+          "min_confidence": {
+            "default": 0.75,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Confidence",
+            "type": "number"
+          }
+        },
+        "title": "GateSettings",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Health": {
+        "additionalProperties": false,
+        "properties": {
+          "dev_mode": {
+            "title": "Dev Mode",
+            "type": "boolean"
+          },
+          "offline": {
+            "title": "Offline",
+            "type": "boolean"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "placeholders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Placeholders",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "offline",
+          "dev_mode",
+          "placeholders"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "MeetingEnded": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "enum": [
+              "bot_left",
+              "call_ended",
+              "dashboard",
+              "replay_finished"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "MeetingEnded",
+        "type": "object"
+      },
+      "MeetingEndedEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/MeetingEnded"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "meeting.ended",
+            "default": "meeting.ended",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "MeetingEndedEvent",
+        "type": "object"
+      },
+      "MeetingListItem": {
+        "additionalProperties": false,
+        "description": "Field order is the sessions-list display order: follow-ups before alerts.",
+        "properties": {
+          "alert_count": {
+            "title": "Alert Count",
+            "type": "integer"
+          },
+          "follow_ups_outstanding": {
+            "title": "Follow Ups Outstanding",
+            "type": "integer"
+          },
+          "follow_ups_resolved": {
+            "title": "Follow Ups Resolved",
+            "type": "integer"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "participants": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "title",
+          "started_at",
+          "participants",
+          "follow_ups_outstanding",
+          "follow_ups_resolved",
+          "alert_count"
+        ],
+        "title": "MeetingListItem",
+        "type": "object"
+      },
+      "MeetingRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "alerts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "answers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpokenAnswer"
+            },
+            "title": "Answers",
+            "type": "array"
+          },
+          "bot_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "joining",
+                  "waiting_room",
+                  "in_call",
+                  "left",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Status"
+          },
+          "chat_posts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChatPost"
+            },
+            "title": "Chat Posts",
+            "type": "array"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "events_last_seq": {
+            "default": 0,
+            "title": "Events Last Seq",
+            "type": "integer"
+          },
+          "follow_ups": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FollowUp"
+            },
+            "title": "Follow Ups",
+            "type": "array"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "meeting_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Url"
+          },
+          "muted": {
+            "default": false,
+            "title": "Muted",
+            "type": "boolean"
+          },
+          "participants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Participant"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "recall_bot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recall Bot Id"
+          },
+          "segments": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegment"
+            },
+            "title": "Segments",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "recall",
+              "replay"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "title",
+          "source",
+          "started_at"
+        ],
+        "title": "MeetingRecord",
+        "type": "object"
+      },
+      "MeetingSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "alert_count": {
+            "title": "Alert Count",
+            "type": "integer"
+          },
+          "canned": {
+            "default": false,
+            "title": "Canned",
+            "type": "boolean"
+          },
+          "follow_up_count": {
+            "title": "Follow Up Count",
+            "type": "integer"
+          },
+          "key_topics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Topics",
+            "type": "array"
+          },
+          "takeaways": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Takeaways",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key_topics",
+          "takeaways",
+          "follow_up_count",
+          "alert_count"
+        ],
+        "title": "MeetingSummary",
+        "type": "object"
+      },
+      "MeetingSummaryEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/MeetingSummary"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "meeting.summary",
+            "default": "meeting.summary",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "MeetingSummaryEvent",
+        "type": "object"
+      },
+      "ModelSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "default": "claude-haiku-4-5-20251001",
+            "title": "Answer",
+            "type": "string"
+          },
+          "cheap_check": {
+            "default": "gemini-3.5-flash-lite",
+            "title": "Cheap Check",
+            "type": "string"
+          },
+          "judge": {
+            "default": "claude-haiku-4-5-20251001",
+            "title": "Judge",
+            "type": "string"
+          },
+          "summary": {
+            "default": "claude-haiku-4-5-20251001",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "title": "ModelSettings",
+        "type": "object"
+      },
+      "Mute": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "const": "dashboard",
+            "default": "dashboard",
+            "title": "By",
+            "type": "string"
+          },
+          "muted": {
+            "title": "Muted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "muted"
+        ],
+        "title": "Mute",
+        "type": "object"
+      },
+      "MuteEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Mute"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "mute",
+            "default": "mute",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "MuteEvent",
+        "type": "object"
+      },
+      "MuteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "muted": {
+            "title": "Muted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "muted"
+        ],
+        "title": "MuteRequest",
+        "type": "object"
+      },
+      "Ok": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "title": "Ok",
+        "type": "object"
+      },
+      "Participant": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "recall_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recall Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker_id",
+          "display_name"
+        ],
+        "title": "Participant",
+        "type": "object"
+      },
+      "ReplayMeetingRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "default": "Fake meeting (replay)",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "ReplayMeetingRequest",
+        "type": "object"
+      },
+      "Settings": {
+        "additionalProperties": false,
+        "properties": {
+          "answer_max_words": {
+            "default": 60,
+            "title": "Answer Max Words",
+            "type": "integer"
+          },
+          "bot_name": {
+            "default": "Meet AGI",
+            "title": "Bot Name",
+            "type": "string"
+          },
+          "consent_text": {
+            "default": "Meet AGI is listening to help with facts from our documents. It may post short notes here. Say \"Hey AGI\" to ask it something, or \"AGI, stop talking\" to stop it.",
+            "maxLength": 500,
+            "title": "Consent Text",
+            "type": "string"
+          },
+          "fillers": {
+            "default": [
+              "Sure, let me look that up.",
+              "One moment, checking the documents.",
+              "Good question, give me a second."
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Fillers",
+            "type": "array"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/GateSettings",
+            "default": {
+              "cheap_threshold": 0.5,
+              "cooldown_seconds": 90,
+              "max_alerts_per_meeting": 8,
+              "min_confidence": 0.75
+            }
+          },
+          "models": {
+            "$ref": "#/components/schemas/ModelSettings",
+            "default": {
+              "answer": "claude-haiku-4-5-20251001",
+              "cheap_check": "gemini-3.5-flash-lite",
+              "judge": "claude-haiku-4-5-20251001",
+              "summary": "claude-haiku-4-5-20251001"
+            }
+          },
+          "speakers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpeakerMapping"
+            },
+            "title": "Speakers",
+            "type": "array"
+          },
+          "stop_variants": {
+            "default": [
+              "agi stop talking",
+              "a g i stop talking",
+              "aji stop talking",
+              "agi stop",
+              "stop talking agi"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Stop Variants",
+            "type": "array"
+          },
+          "voice": {
+            "$ref": "#/components/schemas/VoiceSettings",
+            "default": {
+              "model": "inworld-tts-2",
+              "provider": "inworld",
+              "voice_id": "Grant"
+            }
+          },
+          "wake": {
+            "$ref": "#/components/schemas/WakeSettings",
+            "default": {
+              "max_word_position": 3,
+              "question_wait_seconds": 8,
+              "variants": [
+                "hey agi",
+                "hey a g i",
+                "hey aji",
+                "hey age i",
+                "hey a gi",
+                "hey ag i",
+                "hi agi",
+                "hey agee"
+              ]
+            }
+          }
+        },
+        "title": "Settings",
+        "type": "object"
+      },
+      "SpeakerMapping": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "match_name": {
+            "title": "Match Name",
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "required": [
+          "match_name",
+          "display_name"
+        ],
+        "title": "SpeakerMapping",
+        "type": "object"
+      },
+      "SpokenAnswer": {
+        "additionalProperties": false,
+        "properties": {
+          "answer_id": {
+            "title": "Answer Id",
+            "type": "string"
+          },
+          "asked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asked By"
+          },
+          "canned": {
+            "default": false,
+            "title": "Canned",
+            "type": "boolean"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "playing",
+              "played",
+              "stopped",
+              "muted",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer_id",
+          "question",
+          "text",
+          "evidence",
+          "status"
+        ],
+        "title": "SpokenAnswer",
+        "type": "object"
+      },
+      "SpokenAnswerEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/SpokenAnswer"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "spoken.answer",
+            "default": "spoken.answer",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "SpokenAnswerEvent",
+        "type": "object"
+      },
+      "Stop": {
+        "additionalProperties": false,
+        "properties": {
+          "segment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          },
+          "trigger": {
+            "enum": [
+              "phrase",
+              "button"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trigger"
+        ],
+        "title": "Stop",
+        "type": "object"
+      },
+      "StopEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Stop"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "stop",
+            "default": "stop",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "StopEvent",
+        "type": "object"
+      },
+      "TranscriptSegment": {
+        "additionalProperties": false,
+        "properties": {
+          "segment_id": {
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "recall",
+              "replay",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "string"
+          },
+          "speaker_name": {
+            "title": "Speaker Name",
+            "type": "string"
+          },
+          "t_end": {
+            "title": "T End",
+            "type": "number"
+          },
+          "t_start": {
+            "title": "T Start",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment_id",
+          "speaker_id",
+          "speaker_name",
+          "text",
+          "t_start",
+          "t_end",
+          "source"
+        ],
+        "title": "TranscriptSegment",
+        "type": "object"
+      },
+      "TranscriptSegmentEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TranscriptSegment"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "transcript.segment",
+            "default": "transcript.segment",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "TranscriptSegmentEvent",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VoiceSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "default": "inworld-tts-2",
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "const": "inworld",
+            "default": "inworld",
+            "title": "Provider",
+            "type": "string"
+          },
+          "voice_id": {
+            "default": "Grant",
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "title": "VoiceSettings",
+        "type": "object"
+      },
+      "Wake": {
+        "additionalProperties": false,
+        "properties": {
+          "matched_variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Variant"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          },
+          "trigger": {
+            "enum": [
+              "phrase",
+              "button"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trigger"
+        ],
+        "title": "Wake",
+        "type": "object"
+      },
+      "WakeEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Wake"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "wake",
+            "default": "wake",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meeting_id",
+          "seq",
+          "at",
+          "payload"
+        ],
+        "title": "WakeEvent",
+        "type": "object"
+      },
+      "WakeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          }
+        },
+        "title": "WakeRequest",
+        "type": "object"
+      },
+      "WakeSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "max_word_position": {
+            "default": 3,
+            "title": "Max Word Position",
+            "type": "integer"
+          },
+          "question_wait_seconds": {
+            "default": 8,
+            "title": "Question Wait Seconds",
+            "type": "integer"
+          },
+          "variants": {
+            "default": [
+              "hey agi",
+              "hey a g i",
+              "hey aji",
+              "hey age i",
+              "hey a gi",
+              "hey ag i",
+              "hi agi",
+              "hey agee"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "title": "WakeSettings",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Google Meet copilot backend. Contract: DESIGN.md \u00a74.",
+    "title": "Meet AGI",
+    "version": "0.1.0-milestone-0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/contract/events": {
+      "get": {
+        "description": "Exists so the Event union appears in the API description (for generated types).",
+        "operationId": "contract_events_api_contract_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "alert": "#/components/schemas/AlertEvent",
+                      "bot.status": "#/components/schemas/BotStatusEvent",
+                      "chat.post": "#/components/schemas/ChatPostEvent",
+                      "follow_up": "#/components/schemas/FollowUpEvent",
+                      "meeting.ended": "#/components/schemas/MeetingEndedEvent",
+                      "meeting.summary": "#/components/schemas/MeetingSummaryEvent",
+                      "mute": "#/components/schemas/MuteEvent",
+                      "spoken.answer": "#/components/schemas/SpokenAnswerEvent",
+                      "stop": "#/components/schemas/StopEvent",
+                      "transcript.segment": "#/components/schemas/TranscriptSegmentEvent",
+                      "wake": "#/components/schemas/WakeEvent"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BotStatusEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TranscriptSegmentEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WakeEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/StopEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MuteEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AlertEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SpokenAnswerEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatPostEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FollowUpEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MeetingSummaryEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MeetingEndedEvent"
+                    }
+                  ],
+                  "title": "Response Contract Events Api Contract Events Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Contract Events"
+      }
+    },
+    "/api/dev/meetings": {
+      "post": {
+        "operationId": "create_replay_meeting_api_dev_meetings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayMeetingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Replay Meeting"
+      }
+    },
+    "/api/documents": {
+      "get": {
+        "operationId": "list_documents_api_documents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentInfo"
+                  },
+                  "title": "Response List Documents Api Documents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Documents"
+      },
+      "post": {
+        "operationId": "upload_document_api_documents_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_document_api_documents_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Document"
+      }
+    },
+    "/api/documents/{name}": {
+      "delete": {
+        "operationId": "delete_document_api_documents__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Document"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/meetings": {
+      "get": {
+        "operationId": "list_meetings_api_meetings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingListItem"
+                  },
+                  "title": "Response List Meetings Api Meetings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Meetings"
+      },
+      "post": {
+        "operationId": "create_meeting_api_meetings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMeetingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Meeting"
+      }
+    },
+    "/api/meetings/{meeting_id}": {
+      "get": {
+        "operationId": "get_meeting_api_meetings__meeting_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Meeting"
+      }
+    },
+    "/api/meetings/{meeting_id}/end": {
+      "post": {
+        "operationId": "end_meeting_api_meetings__meeting_id__end_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "End Meeting"
+      }
+    },
+    "/api/meetings/{meeting_id}/events": {
+      "get": {
+        "operationId": "events_api_meetings__meeting_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Since",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Server-Sent Events; each `data:` line is one Event (schema: GET /api/contract/events)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Events"
+      }
+    },
+    "/api/meetings/{meeting_id}/follow-ups/{follow_up_id}": {
+      "patch": {
+        "operationId": "patch_follow_up_api_meetings__meeting_id__follow_ups__follow_up_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "follow_up_id",
+            "required": true,
+            "schema": {
+              "title": "Follow Up Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FollowUpPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowUp"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Follow Up"
+      }
+    },
+    "/api/meetings/{meeting_id}/mute": {
+      "post": {
+        "operationId": "mute_api_meetings__meeting_id__mute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "alert": "#/components/schemas/AlertEvent",
+                      "bot.status": "#/components/schemas/BotStatusEvent",
+                      "chat.post": "#/components/schemas/ChatPostEvent",
+                      "follow_up": "#/components/schemas/FollowUpEvent",
+                      "meeting.ended": "#/components/schemas/MeetingEndedEvent",
+                      "meeting.summary": "#/components/schemas/MeetingSummaryEvent",
+                      "mute": "#/components/schemas/MuteEvent",
+                      "spoken.answer": "#/components/schemas/SpokenAnswerEvent",
+                      "stop": "#/components/schemas/StopEvent",
+                      "transcript.segment": "#/components/schemas/TranscriptSegmentEvent",
+                      "wake": "#/components/schemas/WakeEvent"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BotStatusEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TranscriptSegmentEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WakeEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/StopEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MuteEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AlertEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SpokenAnswerEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatPostEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FollowUpEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MeetingSummaryEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MeetingEndedEvent"
+                    }
+                  ],
+                  "title": "Response Mute Api Meetings  Meeting Id  Mute Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mute"
+      }
+    },
+    "/api/meetings/{meeting_id}/stop": {
+      "post": {
+        "operationId": "stop_api_meetings__meeting_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "alert": "#/components/schemas/AlertEvent",
+                      "bot.status": "#/components/schemas/BotStatusEvent",
+                      "chat.post": "#/components/schemas/ChatPostEvent",
+                      "follow_up": "#/components/schemas/FollowUpEvent",
+                      "meeting.ended": "#/components/schemas/MeetingEndedEvent",
+                      "meeting.summary": "#/components/schemas/MeetingSummaryEvent",
+                      "mute": "#/components/schemas/MuteEvent",
+                      "spoken.answer": "#/components/schemas/SpokenAnswerEvent",
+                      "stop": "#/components/schemas/StopEvent",
+                      "transcript.segment": "#/components/schemas/TranscriptSegmentEvent",
+                      "wake": "#/components/schemas/WakeEvent"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BotStatusEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TranscriptSegmentEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WakeEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/StopEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MuteEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AlertEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SpokenAnswerEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatPostEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FollowUpEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MeetingSummaryEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MeetingEndedEvent"
+                    }
+                  ],
+                  "title": "Response Stop Api Meetings  Meeting Id  Stop Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop"
+      }
+    },
+    "/api/meetings/{meeting_id}/wake": {
+      "post": {
+        "operationId": "wake_api_meetings__meeting_id__wake_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WakeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "alert": "#/components/schemas/AlertEvent",
+                      "bot.status": "#/components/schemas/BotStatusEvent",
+                      "chat.post": "#/components/schemas/ChatPostEvent",
+                      "follow_up": "#/components/schemas/FollowUpEvent",
+                      "meeting.ended": "#/components/schemas/MeetingEndedEvent",
+                      "meeting.summary": "#/components/schemas/MeetingSummaryEvent",
+                      "mute": "#/components/schemas/MuteEvent",
+                      "spoken.answer": "#/components/schemas/SpokenAnswerEvent",
+                      "stop": "#/components/schemas/StopEvent",
+                      "transcript.segment": "#/components/schemas/TranscriptSegmentEvent",
+                      "wake": "#/components/schemas/WakeEvent"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BotStatusEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TranscriptSegmentEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WakeEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/StopEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MuteEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AlertEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SpokenAnswerEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatPostEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FollowUpEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MeetingSummaryEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MeetingEndedEvent"
+                    }
+                  ],
+                  "title": "Response Wake Api Meetings  Meeting Id  Wake Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Wake"
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "operationId": "get_settings_api_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Settings"
+      },
+      "put": {
+        "operationId": "put_settings_api_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Settings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Settings"
+      }
+    },
+    "/webhooks/recall/{token}": {
+      "post": {
+        "operationId": "recall_webhook_webhooks_recall__token__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recall Webhook"
+      }
+    }
+  }
+}
