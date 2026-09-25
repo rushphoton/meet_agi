@@ -77,9 +77,12 @@ class SpeakerMapping(_Model):
 
 class ModelSettings(_Model):
     cheap_check: str = "gemini-3.5-flash-lite"
-    judge: str = "claude-haiku-4-5-20251001"
-    answer: str = "claude-haiku-4-5-20251001"
-    summary: str = "claude-haiku-4-5-20251001"
+    # 25 Sep 2026: Ray chose to wait on Anthropic credit, so every job defaults to Gemini Flash-Lite
+    # (proven on the fake meeting with real keys). Switch back per job in Settings with
+    # "claude-haiku-4-5-20251001" once the Anthropic account has credit - no code change needed.
+    judge: str = "gemini-3.5-flash-lite"
+    answer: str = "gemini-3.5-flash-lite"
+    summary: str = "gemini-3.5-flash-lite"
 
 
 class VoiceSettings(_Model):

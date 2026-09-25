@@ -153,6 +153,8 @@ A **recorder** writes each meeting to one JSON file as it happens. The dashboard
 
 ### 3.5 Models (each is a setting)
 
+**Change, 25 Sep 2026 (integrate step):** Ray decided to wait on Anthropic credit (the account has none). The defaults for judge, answer and summary are now `gemini-3.5-flash-lite`, which passed the fake meeting with real keys. The Claude IDs below stay as the switch-back choice; in Settings a model whose name starts with `gemini-` runs on Gemini, and anything else runs on Claude. Gemini's free tier lets Google use the content to improve its products, so turn on Google billing (paid tier) before any real board material goes through it.
+
 | Job | Default model ID (verified in account 24 Sep 2026) | Setting key | Fallback |
 |---|---|---|---|
 | Cheap "worth a closer look" check | `gemini-3.5-flash-lite` | `models.cheap_check` | `gemini-2.5-flash-lite` |
