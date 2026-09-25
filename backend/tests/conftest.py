@@ -22,6 +22,9 @@ def make_client(tmp_path, monkeypatch):
         # Tests never call a vendor and never depend on the keys in .env (DESIGN §10 rule 4).
         monkeypatch.setenv("OFFLINE", "1")
         monkeypatch.setenv("RECALL_API_KEY", "")
+        # Ray's .env selects Attendee with a real key; tests must never depend on it.
+        monkeypatch.setenv("BOT_PROVIDER", "recall")
+        monkeypatch.setenv("ATTENDEE_API_KEY", "")
         from backend.app.main import create_app
         return TestClient(create_app())
     return _make

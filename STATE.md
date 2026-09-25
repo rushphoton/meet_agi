@@ -12,12 +12,15 @@
   - it writes a summary and follow-ups;
   - the dashboard shows all of it live.
 - **Proof:**
-  - `python scripts/verify.py` → `ALL CHECKS PASSED`. That covers 195 backend tests, the contract drift check, the serve smoke test and `REPLAY OK`.
+  - `python scripts/verify.py` → `ALL CHECKS PASSED`. That covers 227 backend tests, the contract drift check, the serve smoke test and `REPLAY OK`.
   - `npm --prefix frontend run verify` → 47 tests passed, plus the type check and the build.
   - A headless browser drove all three screens during a replay: the alert arrived live, the summary appeared, both follow-ups toggled and stayed toggled, the send-bot form returned the expected 503, and the health poll ran for 60 s with no errors.
 - **With real models:** since 25 Sep, every AI job (cheap check, judge, answer, summary) runs on `gemini-3.5-flash-lite` by default. Ray decided to wait on Anthropic credit (the account has none). The replay with real keys and these defaults gives `REPLAY OK`, with real Gemini text in the alert, the answer and the summary.
 - **Cost:** about US$0.19 per 30-minute meeting on Gemini's paid tier (estimate), or free on the free tier. See reviews/MeetAGI_cheap_model_alternatives.pdf.
-- **Not yet done against a real call:** no Recall account exists, so nothing has joined a real Google Meet.
+- **Real meetings (25 Sep):** the bot can now join a real Google Meet through **Attendee**, using the key already in `.env` (`BOT_PROVIDER=attendee`). This is DESIGN risk R1's fallback, built by the meeting lane. It is tested against a fake Attendee; nothing has joined a real call yet.
+  - Attendee can't cut a clip that is already playing: "AGI, stop talking" drops queued answers, but the one playing finishes (up to about 20 s).
+  - Recall stays the design's vendor for later.
+- **One command for a real meeting:** `python scripts/go.py`. It starts the backend with real AI, the ngrok tunnel and the dashboard, checks each one, opens http://localhost:3000, and prints a plain fix when a step fails. Ctrl+C stops all three.
 - All of this ran in the cloud copy (Linux). Nothing has been run on Windows yet.
 
 ## Needs me
@@ -25,7 +28,7 @@
 1. **Before any real (non-fake) meeting: turn on Google billing** for the Gemini key at https://aistudio.google.com. On the free tier, Google says content is "used to improve our products".
    - This is optional for the fake meeting.
    - Anthropic credit is no longer needed. It is optional later: `python scripts/check_keys.py` shows `ANTHROPIC_API_KEY: FAIL - ... no credit` until you top up, and that line can be ignored while every job runs on Gemini.
-2. **Recall.ai account** (non-Gmail sign-up; blocks milestone 4 only). When it exists:
+2. **Recall.ai account: no longer needed to test.** Attendee works now. Recall stays optional, for later; it can cut playing audio. If you sign up (non-Gmail): When it exists:
    - put `RECALL_API_KEY` and `RECALL_WORKSPACE_SECRET` (whsec_…) into `.env` yourself;
    - change `BOT_PROVIDER=attendee` to `recall` in `.env` (the code is built for Recall, per DESIGN);
    - in Recall's dashboard, point the status webhook at `PUBLIC_BASE_URL/webhooks/recall/<your RECALL_WEBHOOK_TOKEN>`. This is optional, because the backend also checks the bot's status every 3 s.
@@ -38,6 +41,16 @@
    git -C "C:\Users\YBBJ100572\Desktop\AI\Meet AGI" checkout main
    git -C "C:\Users\YBBJ100572\Desktop\AI\Meet AGI" merge --ff-only integrate
    ```
+
+## Test in a real Google Meet (Attendee)
+
+1. VPN on. In PowerShell: `cd "C:\Users\YBBJ100572\Desktop\AI\Meet AGI"`, then `python scripts/go.py`. Wait for `READY`; Chrome opens http://localhost:3000.
+2. In another Chrome tab, while signed in to your **personal** Google account, open https://meet.google.com, choose **New meeting → Start an instant meeting**, and copy the link from the address bar.
+3. On the dashboard, paste the link into **Send Meet AGI to a meeting** and click Send. The live view opens and shows "bot: joining".
+4. In Meet, within about 30 s an **"Ask to join"** prompt for "Meet AGI" appears. Click **Admit**. Attendee removes the bot if it waits 15 minutes.
+5. Turn on your mic and speak, for example "Our Q3 revenue was rising, up three percent." Then say "Hey AGI, what was Q3 revenue according to the board deck?"
+6. Watch the dashboard (transcript, alert, answer) and the Meet chat, and listen for the bot's voice.
+7. End with **End meeting** on the dashboard (the bot leaves and the summary is written), then press Ctrl+C in the PowerShell window.
 
 ## Run the product on the fake meeting (two commands, two PowerShell windows in the Meet AGI folder)
 
@@ -164,6 +177,25 @@ Format: `lane · assumption · why · how to undo`.
 
 **Integrate**
 
+- integrate · tests force BOT_PROVIDER=recall and an empty ATTENDEE_API_KEY (conftest) · Ray's .env has a real Attendee key · none needed
+- integrate · `scripts/go.py` assumes ngrok is logged in on the laptop (authtoken) and prints the exact fix if not · the authtoken is not in .env · none
+- integrate · Attendee meetings are stored with source "recall" and the Attendee id in `recall_bot_id` (the meeting lane asked for a neutral field; deferred) · works as is; only the label is wrong · add `source: "attendee"` and `bot_id` to the contract
+
+**Meeting (Attendee, 25 Sep)**
+
+- meeting · BOT_PROVIDER unset or "recall" → Recall; "attendee" → Attendee; anything else → Recall with a note · Recall is the design's vendor · `choose_provider` in `register.py`
+- meeting · OFFLINE=1 never selects Attendee · OFFLINE means no vendor calls · remove the offline branch in `choose_provider`
+- meeting · captions come from Google Meet's own closed captions (en-US) · no third-party transcription key needed · `transcription_settings` in `AttendeeVendor.create_payload`
+- meeting · webhook triggers are only `bot.state_change` and `transcript.update` · nothing else is used · `WEBHOOK_TRIGGERS`
+- meeting · a repeated caption is detected by (speaker, caption start) plus Attendee's delivery key; the first final text wins · Attendee re-sends edited captions · `_accept_attendee`
+- meeting · a caption's words are spread evenly over its length · Attendee sends no per-word timings · `_attendee_words` in `receiver.py`
+- meeting · stop drops queued answers; a clip already playing finishes · Attendee has no stop-audio call · `AttendeeClient.stop_audio`
+- meeting · end-all finds our bots by the tag `{"created_by": "meet-agi"}` · Attendee bots have no name field · `METADATA` / `is_ours`
+- meeting · a refused audio or chat call → answer marked failed, red warning, cleared on next success · DESIGN's chat-only / dashboard-only fallbacks · `AttendeeClient.output_audio` / `send_chat`
+- meeting · Attendee signature mismatch is logged only (needs ATTENDEE_WEBHOOK_SECRET in .env) · same as Recall · reject in `_accept_attendee`
+- meeting · a non-https PUBLIC_BASE_URL stops sending the bot with a 503 · Attendee rejects http webhooks · `AttendeeVendor.check`
+- meeting · state "leaving" = no change; "post_processing"/"ended"/"data_deleted" = left; "meeting_ended" ends as call_ended, other exits as bot_left · the contract has no "failed" reason · `STATE_MAP`
+
 - integrate · judge, answer and summary default to `gemini-3.5-flash-lite` (contract default, commit on main 25 Sep) · Ray chose to wait on Anthropic credit · set them back to `claude-haiku-4-5-20251001` in Settings, or revert that default in `backend/app/contract/records.py`
 - integrate · three engine tests that are about Claude failures now pick a Claude model explicitly · they relied on the old Claude default · none needed
 
@@ -173,13 +205,14 @@ Format: `lane · assumption · why · how to undo`.
 ## Conditions carried from the gate
 
 1. Before any live demo: Google billing on (paid tier), and `python scripts/check_keys.py` shows `GEMINI_API_KEY: OK`.
-2. Before milestone 4: the Recall account and `BOT_PROVIDER=recall`.
+2. Before a demo in front of people: one real rehearsal through Attendee (the section above). Measure wake-to-answer time; captions arrive only when a line is final, so answers may start later than with Recall.
 3. At milestone 4, record real Recall payloads, check that stop cuts a playing clip (R3), add the real wake-phrase spellings seen, and confirm saves on Windows (review item 9).
 
 ## Not done
 
 - Nothing has run on Windows. The first `python scripts/verify.py` there builds `.venv` and needs internet for pip.
-- Nothing has run against a real Recall bot or a real Google Meet. The fixtures are still synthesized.
+- Nothing has joined a real Google Meet yet. The Attendee and Recall payloads are synthesized from docs and code. One live read-only call was made: Attendee "list bots" → HTTP 200.
+- `scripts/go.py` was tested on Linux without the tunnel only. The ngrok step and the Windows process handling are untested.
 - Claude has not produced any output yet (no credit). This is no longer blocking, since Gemini runs every job.
 - Gemini free-tier rate limits are unknown; they are shown only in AI Studio. A lively meeting makes about 10 checks a minute. If the limit is lower, alerts get skipped and the dashboard shows a red warning.
 - The Recall signature check is not enforced (P2, above).
@@ -187,9 +220,9 @@ Format: `lane · assumption · why · how to undo`.
 
 ## Next three steps
 
-1. Ray: push (Needs me, item 3), then run `python scripts/check_keys.py` on Windows. Expect OK for Gemini, Inworld, the webhook token and the ngrok domain.
-2. Ray: run `python scripts/verify.py` once on Windows, then the two commands above, and watch http://localhost:3000/live during the replay.
-3. Milestone 4: live dry run with a real Recall bot in Ray's own Meet, which needs the Recall account.
+1. Ray: run `python scripts/go.py` and follow "Test in a real Google Meet" above.
+2. Paste what happened into the Claude chat: the go.py window's lines, plus what the dashboard and Meet showed. The next session replaces the synthesized Attendee fixtures with the real payloads it recorded.
+3. Push (Needs me, item 3), then merge `integrate` into `main`.
 
 ## Verify the current state
 
