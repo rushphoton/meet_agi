@@ -683,7 +683,7 @@ export interface components {
         ModelSettings: {
             /**
              * Answer
-             * @default claude-haiku-4-5-20251001
+             * @default gemini-3.5-flash-lite
              */
             answer: string;
             /**
@@ -693,12 +693,12 @@ export interface components {
             cheap_check: string;
             /**
              * Judge
-             * @default claude-haiku-4-5-20251001
+             * @default gemini-3.5-flash-lite
              */
             judge: string;
             /**
              * Summary
-             * @default claude-haiku-4-5-20251001
+             * @default gemini-3.5-flash-lite
              */
             summary: string;
         };
@@ -802,10 +802,10 @@ export interface components {
             gate: components["schemas"]["GateSettings"];
             /**
              * @default {
-             *       "answer": "claude-haiku-4-5-20251001",
+             *       "answer": "gemini-3.5-flash-lite",
              *       "cheap_check": "gemini-3.5-flash-lite",
-             *       "judge": "claude-haiku-4-5-20251001",
-             *       "summary": "claude-haiku-4-5-20251001"
+             *       "judge": "gemini-3.5-flash-lite",
+             *       "summary": "gemini-3.5-flash-lite"
              *     }
              */
             models: components["schemas"]["ModelSettings"];
