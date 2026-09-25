@@ -92,6 +92,7 @@ def test_claude_without_credit_shows_a_health_warning_that_clears_when_it_recove
                 raise LLMError(CREDIT)
             return Verdict(is_issue=False, model="judge-model")
         h = Harness(tmp_path, Scripted(cheap=flag_when("revenue"), verdict=judge))
+        h.settings.models.judge = "claude-haiku-4-5-20251001"  # defaults are Gemini since 25 Sep; this test is about Claude
         await h.say("Marcus Chen", DISPUTE)
         await h.settle()
         warning = h.engine.warnings["engine.judge"]
@@ -109,6 +110,7 @@ def test_each_failing_job_gets_its_own_plain_health_warning(tmp_path):
         h = Harness(tmp_path, Scripted(cheap=LLMError("timed out after 8 s"),
                                        answer_error=LLMError(CREDIT), summary_error=LLMError(CREDIT)))
         h.settings.models.cheap_check = "gemini-3.5-flash-lite"
+        h.settings.models.answer = h.settings.models.summary = "claude-haiku-4-5-20251001"  # Claude jobs, as the test names
         await h.say("Marcus Chen", DISPUTE)
         await h.say("Tom Walsh", QUESTION)
         await h.settle()
@@ -129,6 +131,9 @@ def test_health_endpoint_lists_the_engine_warning(make_client, tmp_path):
         rt = client.app.state.runtime
         set_engine(Engine(Scripted(answer_error=LLMError(CREDIT)), KnowledgeBase(tmp_path / "knowledge"),
                           warnings=rt.warnings))
+        settings = client.get("/api/settings").json()
+        settings["models"]["answer"] = "claude-haiku-4-5-20251001"  # defaults are Gemini since 25 Sep
+        client.put("/api/settings", json=settings)
         m = client.post("/api/dev/meetings", json={"title": "t"}).json()
         client.post(f"/api/meetings/{m['meeting_id']}/wake", json={"question": "What was Q3 revenue?"})
         health = wait_for(lambda: (h := client.get("/api/health").json())["warnings"] and h)

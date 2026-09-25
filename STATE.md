@@ -15,15 +15,16 @@
   - `python scripts/verify.py` → `ALL CHECKS PASSED`. That covers 195 backend tests, the contract drift check, the serve smoke test and `REPLAY OK`.
   - `npm --prefix frontend run verify` → 47 tests passed, plus the type check and the build.
   - A headless browser drove all three screens during a replay: the alert arrived live, the summary appeared, both follow-ups toggled and stayed toggled, the send-bot form returned the expected 503, and the health poll ran for 60 s with no errors.
-- **With real models:** the replay gives `REPLAY OK` when judge, answer and summary are set to `gemini-3.5-flash-lite` in Settings. It fails with Claude, because the Anthropic account has **no credit**.
+- **With real models:** since 25 Sep, every AI job (cheap check, judge, answer, summary) runs on `gemini-3.5-flash-lite` by default. Ray decided to wait on Anthropic credit (the account has none). The replay with real keys and these defaults gives `REPLAY OK`, with real Gemini text in the alert, the answer and the summary.
+- **Cost:** about US$0.19 per 30-minute meeting on Gemini's paid tier (estimate), or free on the free tier. See reviews/MeetAGI_cheap_model_alternatives.pdf.
 - **Not yet done against a real call:** no Recall account exists, so nothing has joined a real Google Meet.
 - All of this ran in the cloud copy (Linux). Nothing has been run on Windows yet.
 
 ## Needs me
 
-1. **Anthropic credit.** Every Claude call is refused ("credit balance is too low").
-   - To fix: top up at console.anthropic.com → Plans & Billing, then run `python scripts/check_keys.py`. It now makes one real Claude call; expect `ANTHROPIC_API_KEY: OK`.
-   - Free workaround until then: on the dashboard's Settings page, set judge, answer and summary to `gemini-3.5-flash-lite`. This was proven on the replay with real keys.
+1. **Before any real (non-fake) meeting: turn on Google billing** for the Gemini key at https://aistudio.google.com. On the free tier, Google says content is "used to improve our products".
+   - This is optional for the fake meeting.
+   - Anthropic credit is no longer needed. It is optional later: `python scripts/check_keys.py` shows `ANTHROPIC_API_KEY: FAIL - ... no credit` until you top up, and that line can be ignored while every job runs on Gemini.
 2. **Recall.ai account** (non-Gmail sign-up; blocks milestone 4 only). When it exists:
    - put `RECALL_API_KEY` and `RECALL_WORKSPACE_SECRET` (whsec_…) into `.env` yourself;
    - change `BOT_PROVIDER=attendee` to `recall` in `.env` (the code is built for Recall, per DESIGN);
@@ -40,9 +41,9 @@
 
 ## Run the product on the fake meeting (two commands, two PowerShell windows in the Meet AGI folder)
 
-Window 1 starts the backend. `OFFLINE=1` uses canned AI so the result doesn't depend on Anthropic credit. Leave it out, after fixing credit or switching to Gemini, to use the real models.
+Window 1 starts the backend with the real models (Gemini). If you want canned AI instead, with no vendor calls, put `$env:OFFLINE=1; ` in front of the command.
 ```
-$env:OFFLINE=1; python scripts/serve.py
+python scripts/serve.py
 ```
 Window 2 builds and starts the dashboard, then runs the meeting. The first time only, run `npm --prefix frontend install` first. Open http://localhost:3000/live before the replay starts.
 ```
@@ -163,12 +164,15 @@ Format: `lane · assumption · why · how to undo`.
 
 **Integrate**
 
+- integrate · judge, answer and summary default to `gemini-3.5-flash-lite` (contract default, commit on main 25 Sep) · Ray chose to wait on Anthropic credit · set them back to `claude-haiku-4-5-20251001` in Settings, or revert that default in `backend/app/contract/records.py`
+- integrate · three engine tests that are about Claude failures now pick a Claude model explicitly · they relied on the old Claude default · none needed
+
 - integrate · the tunnel guard treats any Host / X-Forwarded-Host other than localhost, 127.0.0.1, ::1 or testserver as public · ngrok sets Host to its domain · remove the middleware in `main.py`
 - integrate · `serve.py` keeps DEV_MODE on by default · the fake meeting needs it, and the tunnel guard blocks dev routes from outside · set DEV_MODE=0 in `.env` for the live demo if wanted
 
 ## Conditions carried from the gate
 
-1. Before any live demo: Claude credit, or Settings moved to Gemini, with `python scripts/check_keys.py` all OK.
+1. Before any live demo: Google billing on (paid tier), and `python scripts/check_keys.py` shows `GEMINI_API_KEY: OK`.
 2. Before milestone 4: the Recall account and `BOT_PROVIDER=recall`.
 3. At milestone 4, record real Recall payloads, check that stop cuts a playing clip (R3), add the real wake-phrase spellings seen, and confirm saves on Windows (review item 9).
 
@@ -176,13 +180,14 @@ Format: `lane · assumption · why · how to undo`.
 
 - Nothing has run on Windows. The first `python scripts/verify.py` there builds `.venv` and needs internet for pip.
 - Nothing has run against a real Recall bot or a real Google Meet. The fixtures are still synthesized.
-- Claude has not produced any output yet (no credit). Gemini and the other vendor keys work.
+- Claude has not produced any output yet (no credit). This is no longer blocking, since Gemini runs every job.
+- Gemini free-tier rate limits are unknown; they are shown only in AI Studio. A lively meeting makes about 10 checks a minute. If the limit is lower, alerts get skipped and the dashboard shows a red warning.
 - The Recall signature check is not enforced (P2, above).
 - `integrate` is not merged into `main` (Needs me, item 4).
 
 ## Next three steps
 
-1. Ray: top up Anthropic credit (or switch Settings to Gemini), then run `python scripts/check_keys.py` on Windows.
+1. Ray: push (Needs me, item 3), then run `python scripts/check_keys.py` on Windows. Expect OK for Gemini, Inworld, the webhook token and the ngrok domain.
 2. Ray: run `python scripts/verify.py` once on Windows, then the two commands above, and watch http://localhost:3000/live during the replay.
 3. Milestone 4: live dry run with a real Recall bot in Ray's own Meet, which needs the Recall account.
 
