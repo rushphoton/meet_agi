@@ -1,0 +1,18 @@
+{
+ "_source": "synthesized_from_docs: docs.attendee.dev/webhooks + github.com/attendee-labs/attendee@f51c968 (bots/webhook_payloads.py, bots/tasks/deliver_webhook_task.py, bots/models.py). Not recorded from a live bot.",
+ "idempotency_key": "00000000-0000-4000-8000-000000000002",
+ "bot_id": "bot_00000000000000000001",
+ "bot_metadata": {
+  "created_by": "meet-agi"
+ },
+ "trigger": "transcript.update",
+ "data": {
+  "speaker_name": "Marcus Chen",
+  "speaker_uuid": "spaces/abc/devices/102",
+  "speaker_user_uuid": null,
+  "speaker_is_host": false,
+  "timestamp_ms": 1790000050000,
+  "duration_ms": 0,
+  "transcription": null
+ }
+}

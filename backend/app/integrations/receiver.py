@@ -23,6 +23,15 @@ events (DESIGN.md §3.3 "Hearing"):
    the poller in bot.py is not published twice.
 7. Note the time of every accepted webhook in rt.last_webhook_at, so
    /api/health can tell a quiet room from a dead pipe (review B item 8).
+8. Attendee webhooks (BOT_PROVIDER=attendee, DESIGN risk R1 fallback) arrive
+   at the SAME address - it is the only one the tunnel guard lets through -
+   and are told apart by their shape: Attendee sends {idempotency_key,
+   bot_id, trigger, data}, Recall sends {event, data}. An Attendee caption
+   becomes the same kind of utterance and goes through the same assembler and
+   the same engine door; an Attendee state change becomes the same
+   bot.status / meeting.ended. Attendee's signature (X-Webhook-Signature) is
+   checked when ATTENDEE_WEBHOOK_SECRET is set and, like Recall's, only a
+   mismatch is logged; the path token is what is enforced.
 
 FAILURE IT PREVENTS
 Forged or duplicate lines; Recall giving up on us because we answered slowly
@@ -35,6 +44,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 
 from ..contract.context import MeetingContext
@@ -43,6 +53,7 @@ from ..core.ids import new_id
 from ..core.runtime import Runtime
 from ..pipeline import entry as engine_entry   # looked up at call time: the engine lane replaces its body
 from ..speech.assembler import SentenceAssembler, Sentence, Word
+from .attendee_client import attendee_signature_valid, is_attendee_payload, parse_state_change, parse_utterance
 from .bot import publish_status
 from .signature import recall_signature_valid, token_matches
 
@@ -77,6 +88,8 @@ class RecallReceiver:
         if not token_matches(token, self.rt.config.recall_webhook_token):
             return 401
         self.rt.last_webhook_at = datetime.now(timezone.utc)   # /api/health: "is the pipe alive?"
+        if is_attendee_payload(body):
+            return self._accept_attendee(headers, body)
         self._check_signature(headers, body)
         if not isinstance(body, dict):
             return 200
@@ -103,6 +116,67 @@ class RecallReceiver:
                 seen.pop(next(iter(seen)))
         self._queue_for(record.meeting_id).put_nowait((event_name, data))
         return 200
+
+    # ---------------- Attendee (same address, told apart by shape) ----------------
+    def _accept_attendee(self, headers: dict, body: dict) -> int:
+        secret = os.environ.get("ATTENDEE_WEBHOOK_SECRET", "").strip()
+        if secret and not attendee_signature_valid(body, headers, secret):
+            self.signature_mismatches += 1
+            log.warning("Attendee signature not confirmed (the path token was valid, so the webhook is accepted)")
+        trigger = str(body.get("trigger") or "")
+        data = body.get("data") if isinstance(body.get("data"), dict) else {}
+        bot_id = str(body.get("bot_id") or "")
+        if trigger not in ("transcript.update", "bot.state_change"):
+            return 200   # chat_messages.update, participant_events.*, anything new: acknowledged, ignored
+        record = self.rt.store.meeting_for_bot(bot_id) if bot_id else None
+        if record is None:
+            log.warning("Attendee webhook %s for unknown bot ignored", trigger)
+            return 200
+        seen = self._seen.setdefault(bot_id, {})
+        delivery = ("delivery", str(body.get("idempotency_key") or ""))
+        if delivery[1] and delivery in seen:
+            return 200   # Attendee retried a delivery we already accepted
+        if trigger == "bot.state_change":
+            status, detail, ended_reason = parse_state_change(data)
+            self._remember(seen, delivery)
+            if status is not None:
+                self._queue_for(record.meeting_id).put_nowait(
+                    ("attendee.status", {"status": status, "detail": detail, "ended_reason": ended_reason,
+                                         "bot_id": bot_id}))
+            return 200
+        utterance = parse_utterance(data)
+        if utterance is None:
+            log.warning("Attendee transcript.update without text or speaker ignored (payload shape changed? risk R2)")
+            return 200
+        speaker_id, speaker_name, text, start_ms, duration_ms = utterance
+        key = ("caption", speaker_id, start_ms)   # an edited re-send of the same caption is a repeat
+        self._remember(seen, delivery)
+        if key in seen:
+            return 200
+        self._remember(seen, key)
+        self._queue_for(record.meeting_id).put_nowait(
+            ("attendee.utterance", {"speaker_id": speaker_id, "speaker_name": speaker_name, "text": text,
+                                    "start_ms": start_ms, "duration_ms": duration_ms}))
+        return 200
+
+    @staticmethod
+    def _remember(seen: dict, key: tuple) -> None:
+        if key == ("delivery", ""):
+            return   # no idempotency_key sent: nothing to remember
+        seen[key] = None
+        if len(seen) > DEDUPE_MEMORY:
+            seen.pop(next(iter(seen)))
+
+    def _attendee_words(self, meeting_id: str, item: dict) -> list[Word]:
+        """Attendee sends no word timings: spread the caption's words over its duration, on a clock
+        that starts when our meeting record started (Attendee's timestamp_ms is wall-clock time)."""
+        record = self.rt.store.get(meeting_id)
+        origin = record.started_at.timestamp() if record is not None else 0.0
+        start = max(0.0, item["start_ms"] / 1000.0 - origin)
+        texts = item["text"].split()
+        step = (item["duration_ms"] / 1000.0) / len(texts) if texts else 0.0
+        return [Word(text=t, start=round(start + i * step, 3), end=round(start + (i + 1) * step, 3))
+                for i, t in enumerate(texts)]
 
     def _check_signature(self, headers: dict, body: dict) -> None:
         secret = self.rt.config.recall_workspace_secret
@@ -140,6 +214,20 @@ class RecallReceiver:
             return
         if event_name in STATUS_MAP:
             await self._status(meeting_id, STATUS_MAP[event_name], data)
+            return
+        if event_name == "attendee.status":
+            if data["status"] in ("left", "failed"):
+                await self._emit(meeting_id, self._assembler(meeting_id).flush())
+            # the poller (bot.py) may have reported this already: publish only a change
+            await publish_status(self.rt, meeting_id, data["status"], data["detail"], data["bot_id"],
+                                 data["ended_reason"])
+            return
+        if event_name == "attendee.utterance":
+            participant = {"name": data["speaker_name"]}
+            sentences = self._assembler(meeting_id).add(
+                data["speaker_id"], self._speaker_name(participant), self._attendee_words(meeting_id, data))
+            await self._emit(meeting_id, sentences)
+            self._arm_flush_timer(meeting_id)
             return
         inner = data.get("data") or {}
         participant = inner.get("participant") or {}

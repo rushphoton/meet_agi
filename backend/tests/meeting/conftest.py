@@ -19,6 +19,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.integrations.fake_attendee import FakeAttendee
 from backend.app.integrations.fake_recall import FakeRecall
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -26,6 +27,7 @@ RECALL = ROOT / "fixtures" / "recall"
 TOKEN = "m" * 64
 FAKE_RECALL_KEY = "fake-recall-key-for-tests"
 FAKE_INWORLD_KEY = "fake-inworld-key-for-tests"
+FAKE_ATTENDEE_KEY = "fake-attendee-key-for-tests"
 INWORLD_AUDIO = (ROOT / "backend/app/providers/voice/assets/silence_half_second.mp3").read_bytes()
 
 
@@ -34,6 +36,16 @@ def no_real_network(monkeypatch):
     async def refuse(self, request):
         raise AssertionError(f"meeting-lane test tried a REAL network call to {request.url.host}")
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", refuse)
+
+
+@pytest.fixture(autouse=True)
+def recall_is_the_default_provider(monkeypatch):
+    """Ray's .env says BOT_PROVIDER=attendee with a real key; these tests must never inherit
+    that. Recall is the default; Attendee tests switch explicitly (and use the fake)."""
+    monkeypatch.setenv("BOT_PROVIDER", "recall")
+    monkeypatch.setenv("ATTENDEE_API_KEY", FAKE_ATTENDEE_KEY)
+    monkeypatch.setenv("ATTENDEE_BASE_URL", "https://attendee.invalid")
+    monkeypatch.setenv("ATTENDEE_WEBHOOK_SECRET", "")
 
 
 def fixture_body(name: str, bot_id: str) -> dict:
@@ -88,6 +100,11 @@ def fake_inworld():
 
 
 @pytest.fixture
+def fake_attendee():
+    return FakeAttendee()
+
+
+@pytest.fixture
 def lane_env(monkeypatch, tmp_path):
     monkeypatch.setenv("MEETAGI_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("MEETAGI_KNOWLEDGE_DIR", str(tmp_path / "knowledge"))
@@ -102,7 +119,7 @@ def lane_env(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def lane_app(lane_env, fake_recall, fake_inworld):
+def lane_app(lane_env, fake_recall, fake_inworld, fake_attendee):
     """A full backend whose meeting lane talks to the fake Recall and fake Inworld."""
     from backend.app import main
     from backend.app.integrations import register as reg
@@ -112,7 +129,7 @@ def lane_app(lane_env, fake_recall, fake_inworld):
     def register_with_fakes(rt):
         built["lane"] = reg.install(rt, reg.MeetingLane(
             rt, recall_transport=fake_recall.transport, inworld_transport=fake_inworld.transport,
-            sleep=instant_sleep, poll_seconds=0.05))
+            attendee_transport=fake_attendee.transport, sleep=instant_sleep, poll_seconds=0.05))
 
     lane_env.setattr(main, "register_meeting_lane", register_with_fakes)
 

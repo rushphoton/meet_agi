@@ -24,6 +24,12 @@ Recall.ai (DESIGN.md §2 rows 1, 2, 5, 7, 10, 11):
 Missing settings (RECALL_API_KEY, PUBLIC_BASE_URL, RECALL_WEBHOOK_TOKEN) stop
 launch() with a plain message naming the setting, never its value.
 
+The same lifecycle also drives Attendee (DESIGN risk R1 fallback, selected by
+BOT_PROVIDER=attendee in integrations/register.py). Everything that differs
+between the two vendors - the create-bot body, how a bot's status reads, which
+listed bots are ours, which key is needed - sits in a small "vendor" object:
+RecallVendor below, AttendeeVendor in attendee_client.py.
+
 FAILURE IT PREVENTS
 A bot joining without transcription or without the ability to speak (both
 must be requested at creation and cannot be added later); a bot left running
@@ -89,6 +95,27 @@ def build_create_bot_payload(meeting_url: str, settings: Settings, hook_url: str
     }
 
 
+class RecallVendor:
+    """What BotLifecycle needs to know about Recall (the default vendor)."""
+
+    name = "Recall"
+    key_env = "RECALL_API_KEY"
+    status_warning_key = RECALL_WARNING
+
+    def check(self, config) -> list[str]:
+        return []
+
+    def create_payload(self, meeting_url: str, settings: Settings, hook_url: str) -> dict:
+        return build_create_bot_payload(meeting_url, settings, hook_url)
+
+    def read_status(self, bot: dict) -> tuple[str | None, str | None, str | None]:
+        code, sub_code = latest_code(bot)
+        return STATUS_CODES.get(code), sub_code, ENDED_REASON.get(code)
+
+    def is_ours(self, bot: dict, bot_name: str) -> bool:
+        return bot.get("bot_name") == bot_name
+
+
 def latest_code(bot: dict) -> tuple[str, str | None]:
     changes = bot.get("status_changes") or []
     last = (changes[-1] or {}) if changes else (bot.get("status") or {})
@@ -120,8 +147,11 @@ async def publish_status(rt, meeting_id: str, status: str, detail: str | None, b
 
 class BotLifecycle:
     def __init__(self, rt, client, api_key_set: bool, poll_seconds: float = POLL_SECONDS,
-                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> None:
+                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep, vendor=None,
+                 note: str = "") -> None:
         self.rt = rt
+        self.vendor = vendor or RecallVendor()
+        self.note = note          # appended to the "cannot send" message (e.g. why a vendor was not chosen)
         self.client = client
         self.api_key_set = api_key_set
         self.poll_seconds = poll_seconds
@@ -132,28 +162,29 @@ class BotLifecycle:
     def _missing(self) -> list[str]:
         missing = []
         if not self.api_key_set:
-            missing.append("RECALL_API_KEY")
+            missing.append(self.vendor.key_env)
         if not self.rt.config.public_base_url:
             missing.append("PUBLIC_BASE_URL")
         if not self.rt.config.recall_webhook_token:
             missing.append("RECALL_WEBHOOK_TOKEN")
-        return missing
+        return missing + self.vendor.check(self.rt.config)
 
     async def launch(self, request: CreateMeetingRequest) -> MeetingRecord:
         missing = self._missing()
         if missing:
-            raise HTTPException(503, f"Cannot send the bot: {', '.join(missing)} not set in .env.")
+            raise HTTPException(503, f"Cannot send the bot: {', '.join(missing)} not set in .env."
+                                     + (f" {self.note}" if self.note else ""))
         settings = self.rt.get_settings()
-        payload = build_create_bot_payload(
+        payload = self.vendor.create_payload(
             request.meeting_url, settings,
             webhook_url(self.rt.config.public_base_url, self.rt.config.recall_webhook_token))
         try:
             bot = await self.client.create_bot(payload)
         except RecallError as exc:
-            raise HTTPException(502, f"Recall did not create the bot: {exc}") from None
+            raise HTTPException(502, f"{self.vendor.name} did not create the bot: {exc}") from None
         bot_id = str(bot.get("id") or "")
         if not bot_id:
-            raise HTTPException(502, "Recall created no bot id.")
+            raise HTTPException(502, f"{self.vendor.name} created no bot id.")
         record = self.rt.store.create_meeting(
             title=request.title or "Meeting", source="recall", meeting_url=request.meeting_url,
             recall_bot_id=bot_id)
@@ -166,7 +197,7 @@ class BotLifecycle:
         return self.rt.store.get(record.meeting_id)
 
     async def watch(self, meeting_id: str, bot_id: str) -> None:
-        """Poll Recall until the bot has left or failed, or the meeting has ended."""
+        """Poll the vendor until the bot has left or failed, or the meeting has ended."""
         while True:
             await self.sleep(self.poll_seconds)
             record = self.rt.store.get(meeting_id)
@@ -175,16 +206,16 @@ class BotLifecycle:
             try:
                 bot = await self.client.get_bot(bot_id)
             except RecallError as exc:
-                self.rt.warnings[RECALL_WARNING] = "Recall bot status check failing - status may be stale"
+                self.rt.warnings[self.vendor.status_warning_key] = (
+                    f"{self.vendor.name} bot status check failing - status may be stale")
                 log.warning("Bot status poll failed: %s", exc)
                 continue
-            self.rt.warnings.pop(RECALL_WARNING, None)
-            code, sub_code = latest_code(bot)
-            status = STATUS_CODES.get(code)
+            self.rt.warnings.pop(self.vendor.status_warning_key, None)
+            status, detail, ended_reason = self.vendor.read_status(bot)
             if status is None:
                 continue
             try:
-                await publish_status(self.rt, meeting_id, status, sub_code, bot_id, ENDED_REASON.get(code))
+                await publish_status(self.rt, meeting_id, status, detail, bot_id, ended_reason)
             except Exception:
                 log.exception("Publishing polled bot status failed for %s", meeting_id)
             if status in ("left", "failed"):
@@ -192,7 +223,7 @@ class BotLifecycle:
 
     async def status(self, bot_id: str) -> str | None:
         try:
-            return latest_status(await self.client.get_bot(bot_id))
+            return self.vendor.read_status(await self.client.get_bot(bot_id))[0]
         except RecallError as exc:
             log.warning("Could not read bot status: %s", exc)
             return None
@@ -219,13 +250,13 @@ class BotLifecycle:
         try:
             bots = await self.client.list_bots()
         except RecallError as exc:
-            log.warning("Could not list bots at Recall: %s", exc)
+            log.warning("Could not list bots at %s: %s", self.vendor.name, exc)
             bots = []
         name = self.rt.get_settings().bot_name or "Meet AGI"
         for bot in bots:
             bot_id = str(bot.get("id") or "")
-            if bot_id and bot_id not in told and bot.get("bot_name") == name \
-                    and latest_status(bot) not in ("left", "failed"):
+            if bot_id and bot_id not in told and self.vendor.is_ours(bot, name) \
+                    and self.vendor.read_status(bot)[0] not in ("left", "failed"):
                 try:
                     await self.client.leave_call(bot_id)
                     told.append(bot_id)
