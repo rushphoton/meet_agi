@@ -49,6 +49,14 @@ children: list[subprocess.Popen] = []
 def say(ok: bool | None, text: str) -> None:
     mark = {True: "OK  ", False: "FAIL", None: "... "}[ok]
     print(f"[{mark}] {text}", flush=True)
+    # Also kept in data/logs/go.log with the time (27 Sep 2026: everything stopped after 2 minutes and
+    # nothing on disk said why). Next time the file shows what go.py saw last.
+    try:
+        LOGS.mkdir(parents=True, exist_ok=True)
+        with open(LOGS / "go.log", "a", encoding="utf-8") as fh:
+            fh.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} [{mark}] {text}\n")
+    except OSError:
+        pass
 
 
 def stop(code: int = 0) -> None:
@@ -283,8 +291,16 @@ def main() -> None:
             time.sleep(10)
     except KeyboardInterrupt:
         print("\nStopping everything ...")
+        say(None, "Stop requested (Ctrl+C, or the window was closed)")
         end_live_meetings("Stopping")
         stop(0)
+    except Exception as exc:  # anything unexpected: say so, then shut down cleanly instead of vanishing
+        import traceback
+        say(False, f"go.py hit an unexpected error and is stopping: {exc!r}")
+        with open(LOGS / "go.log", "a", encoding="utf-8") as fh:
+            fh.write(traceback.format_exc())
+        end_live_meetings("Stopping after an error")
+        stop(1)
 
 
 if __name__ == "__main__":
