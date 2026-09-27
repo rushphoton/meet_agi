@@ -71,11 +71,15 @@ for ONE thing: a factual claim that is disputed, doubtful or flip-flopping. Flag
 - disagrees with a fact someone else just stated, or
 - contradicts or corrects THEMSELVES about a fact or number ("it was rising... no wait, that's wrong, \
 it fell"; "this is right... no, this is wrong"), or
-- hedges about a number or fact ("I'm not sure that's right", "hmm, not sure that's correct", "I \
-think it was around..."), or
+- explicitly doubts a specific fact or number that was stated ("I'm not sure that's right", "hmm, not \
+sure that's correct", "wait, was it 41 or 42?"), or
 - is unsure about a fact the documents could settle.
-Self-correction, hedging about a number, and "this is right / this is wrong" flip-flops are ALWAYS worth \
-a look, even when the documents say nothing about the fact and even when only one person is speaking.
+Self-correction, explicit doubt about a stated number, and "this is right / this is wrong" flip-flops are \
+ALWAYS worth a look, even when the documents say nothing about the fact and even when only one person is \
+speaking.
+Casual approximation or hedging while narrating is not doubt: "about", "around", "roughly", "I think" or "maybe" attached to a \
+number while someone narrates or presents ("it costs about 19 cents, I think") is NOT worth a look \
+unless the documents contradict the number.
 Do NOT flag opinions, plans, small talk, questions to the assistant, or facts the documents agree with \
 that nobody doubted.
 Do NOT flag a dispute whose topic is already in the "already flagged" list.
@@ -95,9 +99,13 @@ the meeting chat:
 - "contradiction": a stated fact conflicts with the documents, OR one speaker contradicts or corrects \
 themselves about a fact or number (said it rose, then that it fell; "this is right... this is wrong");
 - "disagreement": participants disagree about a fact;
-- "uncertainty": someone hedges or is unsure about a fact or number ("not sure that's correct").
-Explicitly worth a look: self-correction, hedging about a number, and right/wrong flip-flops - also \
-from a single speaker, not only between people.
+- "uncertainty": someone explicitly doubts a stated fact or number ("not sure that's correct", "wait, \
+was it 41 or 42?").
+Explicitly worth a look: self-correction, explicit doubt about a stated number, and right/wrong \
+flip-flops - also from a single speaker, not only between people.
+Casual approximation or hedging while narrating is not doubt: "about", "around", "roughly", "I think" or "maybe" attached to a \
+number while someone narrates or presents ("it costs about 19 cents, I think") is not an issue \
+(is_issue false) unless the documents contradict the number.
 Evidence: when the documents cover the fact, say what they say and cite them (passage_numbers). When \
 the documents do NOT cover it, it can still be an issue of kind "contradiction" or "uncertainty": the \
 finding then says what was said both ways (or what was doubted) and that the documents don't settle \

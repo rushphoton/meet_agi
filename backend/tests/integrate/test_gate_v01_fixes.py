@@ -164,3 +164,16 @@ def test_go_py_failing_after_ready_left_the_bot_in_the_call(tmp_path, monkeypatc
         pass
     assert ended == ["Stopping after a failure"]
     assert backend.poll() is not None      # and everything was still stopped
+
+
+# ---- item 4: the presenter's own loose numbers got "Because you mentioned..." alerts ---------------
+def test_presenter_saying_about_19_cents_i_think_got_a_chat_alert():
+    # The model's behavior can't be unit-tested; what can be pinned is that both prompts tell it that
+    # casual approximation is not doubt, while explicit doubt and self-correction still count (Ray, Round 2).
+    from backend.app.providers.llm.real import CHEAP_SYSTEM, JUDGE_SYSTEM
+    for prompt in (CHEAP_SYSTEM, JUDGE_SYSTEM):
+        assert "about 19 cents, I think" in prompt
+        assert "not doubt" in prompt
+        assert "I think it was around" not in prompt      # the phrase that invited the false alerts
+        assert "not sure that's correct" in prompt        # explicit doubt still counts
+        assert "corrects" in prompt                       # self-correction still counts
