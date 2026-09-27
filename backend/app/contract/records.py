@@ -103,16 +103,20 @@ class WakeSettings(_Model):
         "hey agi", "hey a g i", "hey aji", "hey age i", "hey a gi", "hey ag i", "hi agi", "hey agee",
         # Seen in the first live Meet test (27 Sep 2026): Meet's captions wrote "Hey GI!" and "Hey, GI, ...".
         "hey gi", "hey g i",
+        # Ray's feedback after the live test (27 Sep 2026): captions also wrote "giant" and "GI Joe".
+        # The engine also matches near-misses after "hey/hi/ok" and confirms them with the cheap model.
+        "hey giant", "hey gi joe", "hey ajay", "hey aj", "hey edgy",
     ]
     max_word_position: int = 3
-    question_wait_seconds: int = 8
+    # 15 s (was 8): in the live test the question came after the filler line, too late.
+    question_wait_seconds: int = 15
 
 
 class Settings(_Model):
     bot_name: str = "Meet AGI"
     consent_text: str = Field(
         default='Meet AGI is listening to help with facts from our documents. It may post short '
-                'notes here. Say "Hey AGI" to ask it something, or "AGI, stop talking" to stop it.',
+                'notes here. Say "Hey AGI" to ask it something, or "stop talking" to stop it.',
         max_length=500,
     )
     speakers: list[SpeakerMapping] = []
@@ -120,10 +124,16 @@ class Settings(_Model):
     voice: VoiceSettings = VoiceSettings()
     gate: GateSettings = GateSettings()
     wake: WakeSettings = WakeSettings()
+    # Ray, 27 Sep 2026: "stop talking" must work without saying AGI - these count only while the bot is
+    # speaking (or just after), so ordinary uses of "stop" in the meeting don't cut anything.
     stop_variants: list[str] = [
         "agi stop talking", "a g i stop talking", "aji stop talking", "agi stop", "stop talking agi",
+        "stop talking", "stop", "okay stop", "ok stop", "please stop", "be quiet", "that's enough",
+        "thats enough", "enough", "shut up", "hold on", "wait wait",
     ]
-    answer_max_words: int = 60
+    # 120 words (was 60): Ray wants longer answers he can cut off part-way; the meeting lane speaks them
+    # sentence by sentence so "stop talking" takes effect at the next sentence.
+    answer_max_words: int = 120
     fillers: list[str] = [
         "Sure, let me look that up.", "One moment, checking the documents.",
         "Good question, give me a second.",

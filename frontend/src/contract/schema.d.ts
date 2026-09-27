@@ -769,7 +769,7 @@ export interface components {
         Settings: {
             /**
              * Answer Max Words
-             * @default 60
+             * @default 120
              */
             answer_max_words: number;
             /**
@@ -779,7 +779,7 @@ export interface components {
             bot_name: string;
             /**
              * Consent Text
-             * @default Meet AGI is listening to help with facts from our documents. It may post short notes here. Say "Hey AGI" to ask it something, or "AGI, stop talking" to stop it.
+             * @default Meet AGI is listening to help with facts from our documents. It may post short notes here. Say "Hey AGI" to ask it something, or "stop talking" to stop it.
              */
             consent_text: string;
             /**
@@ -821,7 +821,19 @@ export interface components {
              *       "a g i stop talking",
              *       "aji stop talking",
              *       "agi stop",
-             *       "stop talking agi"
+             *       "stop talking agi",
+             *       "stop talking",
+             *       "stop",
+             *       "okay stop",
+             *       "ok stop",
+             *       "please stop",
+             *       "be quiet",
+             *       "that's enough",
+             *       "thats enough",
+             *       "enough",
+             *       "shut up",
+             *       "hold on",
+             *       "wait wait"
              *     ]
              */
             stop_variants: string[];
@@ -836,7 +848,7 @@ export interface components {
             /**
              * @default {
              *       "max_word_position": 3,
-             *       "question_wait_seconds": 8,
+             *       "question_wait_seconds": 15,
              *       "variants": [
              *         "hey agi",
              *         "hey a g i",
@@ -847,7 +859,12 @@ export interface components {
              *         "hi agi",
              *         "hey agee",
              *         "hey gi",
-             *         "hey g i"
+             *         "hey g i",
+             *         "hey giant",
+             *         "hey gi joe",
+             *         "hey ajay",
+             *         "hey aj",
+             *         "hey edgy"
              *       ]
              *     }
              */
@@ -1055,7 +1072,7 @@ export interface components {
             max_word_position: number;
             /**
              * Question Wait Seconds
-             * @default 8
+             * @default 15
              */
             question_wait_seconds: number;
             /**
@@ -1070,7 +1087,12 @@ export interface components {
              *       "hi agi",
              *       "hey agee",
              *       "hey gi",
-             *       "hey g i"
+             *       "hey g i",
+             *       "hey giant",
+             *       "hey gi joe",
+             *       "hey ajay",
+             *       "hey aj",
+             *       "hey edgy"
              *     ]
              */
             variants: string[];
