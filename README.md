@@ -31,6 +31,8 @@ The first command you run creates a private Python environment (`.venv`) and ins
    npm --prefix frontend run build; npm --prefix frontend run start
    ```
 
+**Easiest: double-click `Start Meet AGI.bat`** in the Meet AGI folder (right-click it → Send to → Desktop (create shortcut) to put it on your desktop). It runs the command below and keeps the window open.
+
 **Real meeting, one command:** `python scripts/go.py` starts the backend (real AI), the public tunnel and the dashboard, checks each, and opens http://localhost:3000. Paste a Google Meet link into "Send Meet AGI to a meeting". Ctrl+C stops everything. Steps are in STATE.md under "Test in a real Google Meet".
 
 Panic button: `python scripts/end_all_bots.py` makes every Meet AGI bot leave its call.

@@ -2,3 +2,4 @@
 contract/openapi.json text eol=lf
 frontend/src/contract/*.ts text eol=lf
 *.py text eol=lf
+*.bat text eol=crlf
