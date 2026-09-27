@@ -2,8 +2,8 @@
 
 ## Where we are
 
-- **Branch `integrate`** holds milestones 1–3. It has the three lanes merged and integrated, review B done, and every P0/P1 fixed.
-- **Branch `main` = `integrate`** (fast-forwarded 27 Sep after the live Meet test passed).
+- **Branch `integrate`** holds milestones 1–3, review B's fixes, Round 2, and (27 Sep evening) **gate review v0.1 plus all ten of its fixes** (section below).
+- **Branch `main` is at 944c2bb**, which is `integrate` before the gate. `integrate` is 11 commits ahead: the gate report plus the ten fixes. Nothing is pushed.
 - **The fake meeting works end to end, with real code in every part:**
   - it hears the transcript;
   - it flags the one planted dispute in chat with its reasoning;
@@ -12,17 +12,42 @@
   - it writes a summary and follow-ups;
   - the dashboard shows all of it live.
 - **Proof:**
-  - `python scripts/verify.py` → `ALL CHECKS PASSED`. That covers 227 backend tests, the contract drift check, the serve smoke test and `REPLAY OK`.
-  - `npm --prefix frontend run verify` → 47 tests passed, plus the type check and the build.
+  - `python scripts/verify.py` → `ALL CHECKS PASSED` (27 Sep, after the gate fixes). That covers 382 backend tests, the contract drift check, the serve smoke test and `REPLAY OK`.
+  - `npm --prefix frontend run verify` → 49 tests passed, plus the type check and the build.
   - A headless browser drove all three screens during a replay: the alert arrived live, the summary appeared, both follow-ups toggled and stayed toggled, the send-bot form returned the expected 503, and the health poll ran for 60 s with no errors.
 - **With real models:** since 25 Sep, every AI job (cheap check, judge, answer, summary) runs on `gemini-3.5-flash-lite` by default. Ray decided to wait on Anthropic credit (the account has none). The replay with real keys and these defaults gives `REPLAY OK`, with real Gemini text in the alert, the answer and the summary.
 - **Cost:** about US$0.19 per 30-minute meeting on Gemini's paid tier (estimate), or free on the free tier. See reviews/MeetAGI_cheap_model_alternatives.pdf.
 - **27 Sep: first live Google Meet test passed** (see the section below).
-- **Real meetings (25 Sep):** the bot can now join a real Google Meet through **Attendee**, using the key already in `.env` (`BOT_PROVIDER=attendee`). This is DESIGN risk R1's fallback, built by the meeting lane. It is tested against a fake Attendee; nothing has joined a real call yet.
-  - Attendee can't cut a clip that is already playing: "AGI, stop talking" drops queued answers, but the one playing finishes (up to about 20 s).
+- **Real meetings (25 Sep):** the bot can now join a real Google Meet through **Attendee**, using the key already in `.env` (`BOT_PROVIDER=attendee`). This is DESIGN risk R1's fallback, built by the meeting lane. It joined a real call on 27 Sep (below).
+  - Attendee can't cut a clip that is already playing. Answers are spoken sentence by sentence, so "stop talking" drops the remaining sentences and the one playing finishes.
   - Recall stays the design's vendor for later.
-- **One command for a real meeting:** `python scripts/go.py`. It starts the backend with real AI, the ngrok tunnel and the dashboard, checks each one, opens http://localhost:3000, and prints a plain fix when a step fails. Ctrl+C stops all three.
-- All of this ran in the cloud copy (Linux). Nothing has been run on Windows yet.
+- **One command for a real meeting:** `python scripts/go.py`. It starts the backend with real AI, the ngrok tunnel and the dashboard, checks each one, opens http://localhost:3000, and prints a plain fix when a step fails. Ctrl+C stops all three. The dashboard now opens only on this laptop (127.0.0.1).
+- The tests and verify run in the cloud copy (Linux). go.py and the live test ran on Ray's Windows laptop on 27 Sep. The gate fixes have **not** been run on Windows or in a live call yet.
+
+## Gate review v0.1 and its fixes (27 Sep 2026, evening)
+
+Report: `reviews/gate-v0.1.md` (fresh `reviewer` sub-agent, audience "an audience during a live demo tonight"). Verdict: Conditional on all six axes. Ray said "fix one by one"; each fix is its own commit with a test named after the symptom, in `backend/tests/integrate/test_gate_v01_fixes.py` (frontend: `frontend/src/lib/silence.test.ts`). Each test was checked to fail before its fix.
+
+| # | What the room would see | Fix | Proven by | Not proven |
+|---|---|---|---|---|
+| 1 | A saved settings file keeps old defaults ("stop talking" ignored, 60 words, 8 s) | On load, any value still equal to an old default takes today's default; values the user changed are kept. `data/settings.defaults.json` records the defaults at each save, so later default changes also arrive | 3 tests | Ray's own file already had the Round 2 values, so tonight was unaffected either way |
+| 2 | Gemini rate limit → "Sorry, I couldn't look that up" | HTTP 429/503: wait 1 s and retry once; still refused → `gemini-2.5-flash-lite` (its own quota) | 2 tests (fake network) | Real free-tier limits unknown; billing still the real fix |
+| 3 | go.py dies 10 s after READY when the ngrok retry worked; bot left in the call | The watchdog checks only the latest backend/tunnel/dashboard; a failure ends live meetings before stopping | 4 tests | Not run on Windows |
+| 4 | Alerts on the presenter's own loose numbers ("about 19 cents, I think") | Check and judge prompts: casual approximation while narrating is not doubt; explicit doubt and self-correction still alert | prompt test | Real Gemini behavior not re-tested (no key in the cloud copy) |
+| 5 | "Okay, again, what was Q3 revenue?" (to a person) wakes the bot | Everyday words (again, agreed, agenda, give…) never count as AGI-like; "aj"/"ajay" no longer wake during a wake-check outage | 11 tests | Names like Ali/Avi still reach the model check (it decides) |
+| 6 | Follow-up "Hey AGI" waits for the whole old answer | A new wake or re-asked question publishes `stop` first when an answer is queued or playing | 2 tests | Live |
+| 7 | "Stop talking" lets one more sentence play | 0.6 s gap between sentences (was 0.25 s) | 1 test (pins the value) | Only a rehearsal shows the right number |
+| 8 | Red "No transcript" alarm whenever the room is quiet | 30–120 s: grey "Quiet for N s"; red only after 2 minutes | 2 frontend tests | — |
+| 9 | Long meeting slows down (whole file rewritten per event; measured 29 ms/event at 1,500 events) | At most one save a second; the end and the summary are saved at once | 1 test | A hard kill can lose the last second of events |
+| 10 | Dashboard opened by the laptop's name shows errors; **found while checking: its live-stream relay passed the transcript to anyone on the same Wi-Fi** | The dashboard listens on 127.0.0.1 only | 1 test; checked by hand (LAN address refused, localhost 200) | — |
+
+- **Changes to lane-owned files, made by the integrate session at Ray's request:**
+  - engine: prompts, phrases, engine wake/stop, and canned docstring;
+  - meeting: audio gap;
+  - screens: silence notice and CSS.
+  - One lane test changed: `test_slow_wake_check_gives_up_after_its_timeout` now says "Yo GI" instead of "Yo AJ", because AJ is no longer strong.
+- **No contract change.**
+- **Not fixed from the gate:** webhook signatures are still only logged. Enforcing them needs `ATTENDEE_WEBHOOK_SECRET` in `.env`.
 
 ## First live test: real Google Meet via Attendee (27 Sep 2026, HKT afternoon)
 
@@ -61,7 +86,7 @@ What went wrong, and what was done:
   - a general-knowledge answer replaces DESIGN §8 decision 9;
   - the question wait counts from the wake, not from the end of the filler;
   - "words spoken before stop" is only in the log (a contract field `spoken_text` was requested but not added yet).
-- Not tested live yet: the sounds-like wake, stop mid-answer on Attendee, Inworld's voice across many short clips (pauses or pitch changes between sentences).
+- Not tested live yet: the sounds-like wake, stop mid-answer on Attendee, Inworld's voice across many short clips (pauses or pitch changes between sentences), and all ten gate fixes.
 
 ## Needs me
 
@@ -72,11 +97,11 @@ What went wrong, and what was done:
    - put `RECALL_API_KEY` and `RECALL_WORKSPACE_SECRET` (whsec_…) into `.env` yourself;
    - change `BOT_PROVIDER=attendee` to `recall` in `.env` (the code is built for Recall, per DESIGN);
    - in Recall's dashboard, point the status webhook at `PUBLIC_BASE_URL/webhooks/recall/<your RECALL_WEBHOOK_TOKEN>`. This is optional, because the backend also checks the bot's status every 3 s.
-3. **Push**, if the push from this session failed. Run in PowerShell:
+3. **Push** (this session did not push). Run in PowerShell:
    ```
    git -C "C:\Users\YBBJ100572\Desktop\AI\Meet AGI" push origin main integrate
    ```
-4. **Done 27 Sep:** `main` now equals `integrate` (fast-forward after the live test passed). Nothing to do.
+4. **Decide whether the gate fixes go to `main`**, after a rehearsal. `main` is at 944c2bb, before the fixes.
 
 ## Test in a real Google Meet (Attendee)
 
@@ -110,7 +135,7 @@ The replay ends with `REPLAY OK`.
 
 | Lane | Built | Tests | Branch (merged) |
 |---|---|---|---|
-| engine | "Hey AGI" and stop-phrase detection with the positional guard. Manual wake. Question capture. BM25 search over `knowledge/`. Spoken answers of 60 words or fewer ("Because you asked:"). Gemini cheap check → Claude judge → gate (confidence, cooldown, cap). Chat alerts ("Because you mentioned ___:", 500 characters or fewer) with full reasoning. Summary and follow-ups at the end. Any job can run on Gemini from Settings. Health warnings for failing vendors. Near-miss wake phrases are logged. The dispute-check backlog is skipped when it grows. | 95 | `worktree-agent-ad67231307852fb42` |
+| engine | "Hey AGI" and stop-phrase detection with the positional guard. Manual wake. Question capture. BM25 search over `knowledge/`. Spoken answers of 60 words or fewer at milestone 3 (up to 120 since Round 2) ("Because you asked:"). Gemini cheap check → judge (Gemini by default since 25 Sep) → gate (confidence, cooldown, cap). Chat alerts ("Because you mentioned ___:", 500 characters or fewer) with full reasoning. Summary and follow-ups at the end. Any job can run on Gemini from Settings. Health warnings for failing vendors. Near-miss wake phrases are logged. The dispute-check backlog is skipped when it grows. | 95 | `worktree-agent-ad67231307852fb42` |
 | meeting | Recall bot lifecycle: create as "Meet AGI", status polling every 3 s, leave, end-all. Webhook receiver: finalized lines only, constant-time token, answers fast then works, deduplicates, builds sentences on pause, at 40 words or on a change of speaker. One-clip-at-a-time audio queue that respects mute and stop. Inworld voice with a canned clip that says it is canned, used in replay/OFFLINE only; in a real call a voice failure means the answer goes to chat only. Filler bank. Chat poster (500 characters or fewer, cut at a word). Subscribed on the bus to spoken.answer, stop, wake, mute, meeting.ended (audio) and chat.post (chat). | 66 | `worktree-agent-afccc9fb44059fb59` |
 | screens | Next.js dashboard with four screens: sessions (with a "Send Meet AGI" form), live (transcript, alerts with reasoning, answers, chat, wake/stop/mute/end, red "no transcript for N s" notice), review (summary, follow-up toggles, alerts, transcript) and settings. Folds the live stream by seq and resumes with `?since`. Relays the stream so there is no 15 s stall. The health banner shows placeholders in yellow and warnings in red. | 47 | `worktree-agent-a4bb159774c8675df` |
 
@@ -167,7 +192,7 @@ Format: `lane · assumption · why · how to undo`.
 - engine · model work runs in background tasks, so the wake button's answer lands just after the request returns · the filler must not wait for Claude · await inside `on_wake_button`
 - engine · a new "Hey AGI" cancels an earlier unanswered wake or an answer still being prepared · never two answers · remove `_cancel_speech` on wake
 - engine · a bare "Hey AGI" with no question gives a spoken "didn't catch" line and no chat post · "Because you asked:" needs a question · set post_chat=True in `_start_fixed_answer`
-- engine · the wake button without a question takes the next sentence from anyone within 8 s · no speaker is known for a button · restrict in `on_wake_button`
+- engine · the wake button without a question takes the next sentence from anyone within the question wait (15 s since Round 2) · no speaker is known for a button · restrict in `on_wake_button`
 - engine · the stop phrase counts while waiting, generating, queued/playing (capped at 120 s) and for 5 s after · status updates may not arrive · constants in `engine.py`
 - engine · cooldown is measured in meeting time, not wall-clock time · replay at any speed behaves like a live meeting · switch to `time.monotonic`
 - engine · inside the cooldown, a flagged sentence sharing 2+ content words with the alerted topic is not judged or recorded · the live run showed 4 flags for one dispute; this departs slightly from DESIGN §3.3 step 5 · remove `_continues_recent_alert`
@@ -246,21 +271,24 @@ Format: `lane · assumption · why · how to undo`.
 
 ## Not done
 
-- Nothing has run on Windows. The first `python scripts/verify.py` there builds `.venv` and needs internet for pip.
-- Nothing has joined a real Google Meet yet. The Attendee and Recall payloads are synthesized from docs and code. One live read-only call was made: Attendee "list bots" → HTTP 200.
+- `python scripts/verify.py` has not been run on Windows (go.py has). The gate fixes are unrun on Windows.
+- The Recall payloads are still synthesized. Attendee joined one real call (27 Sep).
 - 27 Sep: Ray's first `go.py` run on Windows got the venv, backend and Attendee key check OK, then failed at the tunnel: ERR_NGROK_334 (an old ngrok still held the address). Fixed: go.py now reuses that tunnel if it already reaches this backend; otherwise it stops old ngrok processes on the laptop and retries once, and if the address is held elsewhere it points to https://dashboard.ngrok.com/endpoints (test named after the symptom).
 - 27 Sep, second run: the tunnel passed, then the dashboard failed with `connect ECONNREFUSED ::1:8000`. Cause: Windows resolves "localhost" to IPv6 ::1, but the backend listens on 127.0.0.1 only. Fixed: go.py points the dashboard at 127.0.0.1 for build and start (rebuilding when that changes) and checks it at 127.0.0.1; the frontend default and .env.example use 127.0.0.1. Reproduced here by making localhost resolve to ::1 only: with the fix, the dashboard starts and the built forwarding rule targets 127.0.0.1. The frontend default is a one-line change in the screens lane's file, made at integrate.
-- `scripts/go.py` was tested on Linux without the tunnel only. The ngrok step and the Windows process handling are untested.
+- go.py's ngrok retry path is covered by tests on Linux only (gate #3).
 - Claude has not produced any output yet (no credit). This is no longer blocking, since Gemini runs every job.
 - Gemini free-tier rate limits are unknown; they are shown only in AI Studio. A lively meeting makes about 10 checks a minute. If the limit is lower, alerts get skipped and the dashboard shows a red warning.
 - The Recall signature check is not enforced (P2, above).
-- `integrate` is not merged into `main` (Needs me, item 4).
+- `integrate` (with the gate fixes) is not merged into `main` (Needs me, item 4).
 
 ## Next three steps
 
-1. Ray: run `python scripts/go.py` and follow "Test in a real Google Meet" above.
-2. Paste what happened into the Claude chat: the go.py window's lines, plus what the dashboard and Meet showed. The next session replaces the synthesized Attendee fixtures with the real payloads it recorded.
-3. Push (Needs me, item 3), then merge `integrate` into `main`.
+1. Ray: turn on Gemini billing, then run `python scripts/check_keys.py` (expect `GEMINI_API_KEY: OK`).
+2. Ray: a 5-minute rehearsal before tonight: `python scripts/go.py`, then follow "Test in a real Google Meet" above. Try the following and paste the go.py lines into the Claude chat:
+   - a follow-up "Hey AGI" while the bot is still answering (gate #6);
+   - "stop talking" mid-answer (gate #7);
+   - "Okay, again, …" said to a person (gate #5).
+3. If the rehearsal is clean: push, and fast-forward `main` to `integrate`.
 
 ## Verify the current state
 

@@ -22,7 +22,7 @@ The "thinker". After every finished sentence it decides, in this order:
 3. Otherwise: is there a factual dispute, doubt or self-correction, whoever
    is speaking (one person contradicting themselves counts)?
    -> Gemini Flash-Lite takes a quick look at every sentence; only when it
-   sees something does Claude judge it; the gate (gate.py) decides whether
+   sees something does the judge model (Settings; Gemini by default) look at it; the gate (gate.py) decides whether
    the room hears about it. Publishes `alert` (full reasoning, for the
    dashboard) and, if the gate passes, a chat line "Because you mentioned
    ...: ..." under 500 characters.
