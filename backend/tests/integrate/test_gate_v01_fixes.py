@@ -177,3 +177,27 @@ def test_presenter_saying_about_19_cents_i_think_got_a_chat_alert():
         assert "I think it was around" not in prompt      # the phrase that invited the false alerts
         assert "not sure that's correct" in prompt        # explicit doubt still counts
         assert "corrects" in prompt                       # self-correction still counts
+
+
+# ---- item 5: ordinary phrases were treated as "sounds like Hey AGI" ---------------------------------
+import pytest  # noqa: E402
+
+from backend.app.pipeline.phrases import STRONG_TOKENS, fuzzy_wake_candidate  # noqa: E402
+
+
+@pytest.mark.parametrize("sentence", [
+    "Okay, again, what was Q3 revenue?", "OK, agreed, let's move on.", "Hey, agreed.",
+    "Okay, give me the churn number.", "OK, agenda item two.", "Hey, good to see you, give me a sec.",
+])
+def test_okay_again_what_was_q3_revenue_asked_of_a_person_woke_the_bot(sentence):
+    assert fuzzy_wake_candidate(sentence) is None      # not even worth asking the model
+
+
+@pytest.mark.parametrize("sentence", ["Hey Aggie, what was Q3 revenue?", "Okay AGI, what's churn?",
+                                      "Hey giant, what was churn?", "Hey GI Joe, pipeline?"])
+def test_real_caption_misspellings_still_reach_the_wake_check(sentence):
+    assert fuzzy_wake_candidate(sentence) is not None
+
+
+def test_colleague_ajay_woke_the_bot_when_the_wake_check_was_down():
+    assert "aj" not in STRONG_TOKENS and "ajay" not in STRONG_TOKENS

@@ -13,7 +13,7 @@ one alert, one spoken answer and one summary.
 
 Its rules (deliberately simple, deliberately visible):
 - wake check (a sentence that only SOUNDED like "Hey AGI"): yes only when the
-  AGI-like word is one of the strong ones ("gi", "giant", "aj", "ajay",
+  AGI-like word is one of the strong ones ("gi", "giant",
   "edgy", "agee", "agi", "aji") - the same rule the engine falls back to when
   the real check fails. "Hey Jim", "Hi Gina" and "Hey Aggie" are "no".
 - cheap check: a sentence that states a direction ("rising", "fell", ...)

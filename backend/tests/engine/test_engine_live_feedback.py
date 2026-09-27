@@ -72,7 +72,7 @@ def test_slow_wake_check_gives_up_after_its_timeout(tmp_path, monkeypatch):
     monkeypatch.setattr(engine_mod, "WAKE_CHECK_SECONDS", 0.1)   # 8 s in real life
     async def go():
         h = Harness(tmp_path, Scripted(wake=False, wake_delay=2))
-        await h.say(RAY, "Yo AJ, what was gross margin?")
+        await h.say(RAY, "Yo GI, what was gross margin?")   # gate v0.1: "AJ" is no longer strong
         await h.settle()
         [wake] = wakes(h)
         assert wake.payload.question == "what was gross margin?"

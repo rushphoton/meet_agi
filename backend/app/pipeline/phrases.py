@@ -91,8 +91,14 @@ GREETINGS = {"hey", "hi", "hay", "ok", "okay", "yo"}   # plus "a", but only as t
 _CLOSE_PREFIXES = ("ag", "aj", "gi", "ji", "edg", "eg")
 _CLOSE_WORDS = {"giant", "gi", "joe", "ajay"}
 _CLOSE_TARGETS = ("agi", "agee", "ajee", "aji")         # "a g i" is joined to "agi" before comparing
+# Everyday words that share a prefix with "AGI" (gate v0.1, item 5): "Okay, again, what was Q3 revenue?"
+# asked of a person must not reach the wake check at all.
+_NOT_AGI = {"again", "against", "agree", "agreed", "agrees", "agreement", "agenda", "agent", "agents",
+            "age", "ages", "aged", "ago", "agile", "give", "given", "gives", "giving", "gift", "gifts",
+            "girl", "girls", "egg", "eggs", "edge", "edges", "edit", "eg"}
 # Words so close to "AGI" that, if the confirming model call fails or times out, the bot wakes anyway.
-STRONG_TOKENS = {"gi", "giant", "aj", "ajay", "edgy", "agee", "agi", "aji", "gijoe"}
+# Not "aj"/"ajay": a colleague named Ajay would wake the bot during a wake-check outage (gate v0.1, item 5).
+STRONG_TOKENS = {"gi", "giant", "edgy", "agee", "agi", "aji", "gijoe"}
 
 
 def _edit_distance(a: str, b: str) -> int:
@@ -107,7 +113,7 @@ def _edit_distance(a: str, b: str) -> int:
 
 def sounds_like_agi(token: str) -> bool:
     """A single (joined) word that captions might have written for "AGI"."""
-    if not token:
+    if not token or token in _NOT_AGI:
         return False
     if token in _CLOSE_WORDS or token.startswith(_CLOSE_PREFIXES):
         return True
