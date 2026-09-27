@@ -269,6 +269,7 @@ class Engine:
                 st.missed = None
                 st.recent.append(segment)
                 self._cancel_speech(st)
+                await self._cut_audio(ctx, st, segment)
                 self._start_answer(ctx, st, segment.text, segment.speaker_name)
                 return
 
@@ -279,6 +280,8 @@ class Engine:
     async def _wake(self, ctx: MeetingContext, st: _MeetingState, segment: TranscriptSegment, variant: str,
                     question: str | None) -> None:
         self._cancel_speech(st)  # a new wake supersedes an older, unanswered one
+        # ... and an older answer still queued or playing: cut it before the new filler (gate v0.1, item 6).
+        await self._cut_audio(ctx, st, segment)
         st.missed = None
         if st.confirming is not None and st.confirming.segment is not segment:
             st.confirming = None     # someone else's exact "Hey AGI" beat the check; drop that check
@@ -387,6 +390,12 @@ class Engine:
         if st.last_answer_status in ("queued", "playing") and age < QUEUED_ANSWER_MAX_SECONDS:
             return True
         return age < STOP_GRACE_SECONDS
+
+    async def _cut_audio(self, ctx: MeetingContext, st: _MeetingState, segment: TranscriptSegment) -> None:
+        """Publish "stop" when an earlier answer is still queued or playing, so the audio queue drops it."""
+        age = None if st.last_answer_at is None else time.monotonic() - st.last_answer_at
+        if st.last_answer_status in ("queued", "playing") and age is not None and age < QUEUED_ANSWER_MAX_SECONDS:
+            await ctx.bus.publish(ctx.meeting_id, "stop", Stop(trigger="phrase", segment_id=segment.segment_id))
 
     def _cancel_speech(self, st: _MeetingState) -> None:
         self._clear_pending(st)

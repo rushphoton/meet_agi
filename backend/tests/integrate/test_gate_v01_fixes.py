@@ -201,3 +201,38 @@ def test_real_caption_misspellings_still_reach_the_wake_check(sentence):
 
 def test_colleague_ajay_woke_the_bot_when_the_wake_check_was_down():
     assert "aj" not in STRONG_TOKENS and "ajay" not in STRONG_TOKENS
+
+
+# ---- item 6: a new "Hey AGI" during a long answer didn't cut the old one --------------------------
+from backend.tests.engine.harness import Harness, Scripted, run  # noqa: E402
+
+
+def test_hey_agi_follow_up_during_a_long_answer_waited_for_the_whole_old_answer(tmp_path):
+    async def go():
+        h = Harness(tmp_path, Scripted())
+        await h.say("Ray Wan", "Hey AGI, what was Q3 revenue?", at=10)
+        await h.settle()
+        assert h.events("stop") == []                      # nothing was playing before the first question
+        await h.bus.publish(h.meeting_id, "spoken.answer",  # the meeting lane: the answer is now playing
+                            h.events("spoken.answer")[-1].payload.model_copy(update={"status": "playing"}))
+        await h.say("Ray Wan", "Hey AGI, and what about Q4?", at=15)
+        await h.settle()
+        [stop] = h.events("stop")
+        second_wake = h.events("wake")[-1]
+        assert stop.seq < second_wake.seq                   # old answer cut before the new filler
+        assert second_wake.payload.question == "and what about Q4?"
+    run(go())
+
+
+def test_hey_agi_long_after_the_last_answer_publishes_no_stop(tmp_path):
+    async def go():
+        h = Harness(tmp_path, Scripted())
+        await h.say("Ray Wan", "Hey AGI, what was Q3 revenue?", at=10)
+        await h.settle()
+        await h.bus.publish(h.meeting_id, "spoken.answer",
+                            h.events("spoken.answer")[-1].payload.model_copy(update={"status": "played"}))
+        h.engine._state(h.meeting_id).last_answer_at -= 60   # a minute later
+        await h.say("Ray Wan", "Hey AGI, and what about Q4?", at=75)
+        await h.settle()
+        assert h.events("stop") == []
+    run(go())
