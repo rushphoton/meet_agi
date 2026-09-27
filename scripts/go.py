@@ -233,7 +233,11 @@ def run_dashboard() -> None:
             fail("Building the dashboard failed.", "Copy the lines above into the Claude chat.", log)
         built_for.write_text(BACKEND, encoding="utf-8")
     say(None, "Starting the dashboard on http://localhost:3000 ...")
-    p, log = start("dashboard", [npm, "run", "start", "--", "-p", "3000"], cwd=front, env=env)
+    # -H 127.0.0.1 (gate v0.1, item 10): Next.js listens on every network by default, so anyone on the same
+    # Wi-Fi could open the dashboard by the laptop's name. The API then answered 404 (the tunnel guard sees
+    # their host name), but the live-stream relay did not forward that name and passed the transcript on.
+    # Only this laptop can open the dashboard now.
+    p, log = start("dashboard", [npm, "run", "start", "--", "-p", "3000", "-H", "127.0.0.1"], cwd=front, env=env)
     if not wait_until(lambda: httpx.get(DASHBOARD_CHECK + "/api/health", timeout=3).status_code == 200, p, 60):
         fail("The dashboard did not start.", "Copy the lines above into the Claude chat.", log)
     say(True, "Dashboard running and talking to the backend")

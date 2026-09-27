@@ -275,3 +275,11 @@ def test_long_meeting_rewrote_the_whole_file_on_every_event_and_lagged(tmp_path,
         on_disk = _json.loads(s.path_for(mid).read_text(encoding="utf-8"))
         assert on_disk["record"]["ended_at"] is not None     # the end is written at once
     asyncio.run(go())
+
+
+# ---- item 10: the dashboard opened by the laptop's name (same Wi-Fi) showed errors and leaked the stream
+def test_dashboard_opened_from_the_venue_wifi_showed_errors_and_relayed_the_live_transcript():
+    # Seen when checking item 10 (27 Sep): through Next.js with Host "laptop-7toqnc8b:3000", /api/health got
+    # the tunnel guard's 404 but /api/meetings/<id>/events streamed. The dashboard must listen on 127.0.0.1.
+    src = (ROOT / "scripts" / "go.py").read_text(encoding="utf-8")
+    assert '"start", "--", "-p", "3000", "-H", "127.0.0.1"' in src
