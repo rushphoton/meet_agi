@@ -3,7 +3,7 @@
 ## Where we are
 
 - **Branch `integrate`** holds milestones 1–3. It has the three lanes merged and integrated, review B done, and every P0/P1 fixed.
-- **Branch `main`** is milestone 0 plus one contract change (health warnings). `integrate` has not been merged into `main` yet.
+- **Branch `main` = `integrate`** (fast-forwarded 27 Sep after the live Meet test passed).
 - **The fake meeting works end to end, with real code in every part:**
   - it hears the transcript;
   - it flags the one planted dispute in chat with its reasoning;
@@ -57,11 +57,7 @@ What went wrong, and what was done:
    ```
    git -C "C:\Users\YBBJ100572\Desktop\AI\Meet AGI" push origin main integrate
    ```
-4. **Decision: merge `integrate` into `main`.** I recommend yes after the first Windows run. To merge:
-   ```
-   git -C "C:\Users\YBBJ100572\Desktop\AI\Meet AGI" checkout main
-   git -C "C:\Users\YBBJ100572\Desktop\AI\Meet AGI" merge --ff-only integrate
-   ```
+4. **Done 27 Sep:** `main` now equals `integrate` (fast-forward after the live test passed). Nothing to do.
 
 ## Test in a real Google Meet (Attendee)
 
