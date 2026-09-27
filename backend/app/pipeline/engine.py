@@ -3,10 +3,15 @@ WHY THIS EXISTS
 The "thinker". After every finished sentence it decides, in this order:
 1. Is anyone saying "stop talking" (or "AGI, stop", "Stop.", "Enough.")
    while the bot is preparing, queuing or playing an answer, or within 5 s
-   after? -> publish `stop` and drop any answer still being prepared.
+   after? -> publish `stop` and drop any answer still being prepared. A
+   sentence holding a stop phrase is never a wake or a question: with the
+   bot silent it is ignored (live: "Hey AJI, stop talking." made the bot SAY
+   it would stop).
 2. Is someone saying "Hey AGI" (or pressing the wake button)?
    -> exact spellings (Settings) wake at once; a sentence that only SOUNDS
    like it ("Hey Aggie, ...") is first confirmed by one cheap-model call.
+   "AGI, what's churn?" / "Agi wake up!" (no greeting) wake too; "wake up"
+   alone gets "I'm here. What's your question?" and the next sentence.
    Then publish `wake` (so the filler line can play), take the question (the
    rest of the sentence, or the same person's next sentence within
    wake.question_wait_seconds - 15 s), look it up in the documents, answer
@@ -51,7 +56,8 @@ from ..knowledge.index import tokenize
 from ..providers.llm.base import AnswerDraft, LLMError, LLMProvider
 from .gate import check_gate
 from .phrases import (
-    WakeCandidate, detect_stop, detect_wake, fuzzy_wake_candidate, looks_like_question, looks_like_wake_attempt,
+    WakeCandidate, detect_direct_address, detect_stop, detect_wake, fuzzy_wake_candidate, is_summons,
+    looks_like_question, looks_like_wake_attempt, normalize,
 )
 
 log = logging.getLogger("meet_agi.engine")
@@ -66,6 +72,10 @@ MAX_WAITING = 2              # more sentences than this waiting for a dispute ch
 MISSED_FOLLOW_UP_SECONDS = 20  # after "didn't catch a question", a clear re-ask this soon is answered
 WAKE_CHECK_SECONDS = 8.0     # the cheap model's "is this person talking to the assistant?" call
 NO_QUESTION = "Sorry, I didn't catch a question."
+IM_HERE = "I'm here. What's your question?"   # after "AGI, wake up!" - a call, not a question
+# A silent-bot sentence holding a stop phrase plus more than this many other words is still checked for
+# disputes ("Stop, the Q3 number is wrong, it fell"); shorter ones ("Hey AJI, stop talking.") are dropped.
+STOP_ONLY_EXTRA_WORDS = 4
 ANSWER_FAILED = "Sorry, I couldn't look that up just now."
 
 
@@ -77,6 +87,7 @@ class _Pending:
     speaker_name: str | None
     wake_t_end: float | None    # meeting time of the wake sentence (None for the button)
     timer: asyncio.Task | None = None
+    quiet: bool = False         # the bot already said "I'm here, what's your question?": no "Sorry" later
 
 
 @dataclass
@@ -180,9 +191,20 @@ class Engine:
         s = ctx.settings
 
         # 1. "Stop talking" (anyone, with or without "AGI") - only while the bot is (about to be) speaking.
-        if detect_stop(segment.text, s.stop_variants) and self._speaking(st):
-            self._cancel_speech(st)
-            await ctx.bus.publish(ctx.meeting_id, "stop", Stop(trigger="phrase", segment_id=segment.segment_id))
+        #    A sentence holding a stop phrase is NEVER a wake or a question (live, 27 Sep: "Hey AJI, stop
+        #    talking." woke the bot, which then said "I will stop talking right now").
+        stop = detect_stop(segment.text, s.stop_variants)
+        if stop:
+            if self._speaking(st):
+                self._cancel_speech(st)
+                await ctx.bus.publish(ctx.meeting_id, "stop", Stop(trigger="phrase", segment_id=segment.segment_id))
+                return
+            st.confirming = None   # a "stop" right after a sounds-like wake cancels that wake
+            st.recent.append(segment)
+            if len(normalize(segment.text).split()) - len(stop.split()) > STOP_ONLY_EXTRA_WORDS:
+                self._enqueue_detection(ctx, st, list(st.recent))   # a longer sentence may still hold a claim
+            else:
+                log.info("Stop phrase while the bot is silent: ignored (%r)", segment.text)
             return
 
         # 1b. The same speaker keeps talking while we check whether they said "Hey AGI": hold it.
@@ -198,7 +220,17 @@ class Engine:
         if wake:
             await self._wake(ctx, st, segment, wake.variant, wake.question)
             return
-        candidate = None if wake else fuzzy_wake_candidate(segment.text, s.wake.max_word_position)
+        # 2b. "AGI, what's churn?" / "Agi wake up!": the AGI-like word opens the sentence, no greeting.
+        address = detect_direct_address(segment.text, s.wake.max_word_position)
+        if address is not None and address.exact and address.clear:
+            await self._wake(ctx, st, segment, f"{address.variant} (direct address)", address.question)
+            return
+        candidate = fuzzy_wake_candidate(segment.text, s.wake.max_word_position)
+        if candidate is None and address is not None:
+            # Unclear shape ("AGI, as a concept, ...") or only sounds like AGI ("Aggie, what's churn?"):
+            # the model decides. Never "strong": with no greeting, an outage means no wake.
+            candidate = WakeCandidate(variant=f"{address.variant} (direct address)", token=address.token,
+                                      strong=False, question=address.question)
         if candidate is not None and st.confirming is None:
             # Sounds like "Hey AGI" but isn't an exact spelling: one cheap-model call decides.
             st.confirming = _Confirming(segment, candidate)
@@ -213,12 +245,15 @@ class Engine:
             same = pending.speaker_id is None or pending.speaker_id == segment.speaker_id
             if since is not None and since > wait:
                 self._clear_pending(st)
-                if same and since <= wait + MISSED_FOLLOW_UP_SECONDS and looks_like_question(segment.text):
+                if pending.quiet:
+                    pass   # "I'm here, what's your question?" was said; no question came - say nothing more
+                elif same and since <= wait + MISSED_FOLLOW_UP_SECONDS and looks_like_question(segment.text):
                     st.recent.append(segment)   # a late but clear question: answer it, no "sorry"
                     self._start_answer(ctx, st, segment.text, segment.speaker_name)
                     return
-                self._start_fixed_answer(ctx, st, NO_QUESTION, pending.speaker_name)
-                self._remember_missed(st, pending, wait)
+                else:
+                    self._start_fixed_answer(ctx, st, NO_QUESTION, pending.speaker_name)
+                    self._remember_missed(st, pending, wait)
             elif same:
                 self._clear_pending(st)
                 st.recent.append(segment)
@@ -248,9 +283,16 @@ class Engine:
         if st.confirming is not None and st.confirming.segment is not segment:
             st.confirming = None     # someone else's exact "Hey AGI" beat the check; drop that check
         st.recent.append(segment)
+        summons = is_summons(question)
+        if summons:
+            question = None      # "Agi wake up!" calls the bot; "wake up" is not the question
         await ctx.bus.publish(ctx.meeting_id, "wake", Wake(
             trigger="phrase", segment_id=segment.segment_id, matched_variant=variant, question=question))
-        if question:
+        if summons:
+            self._start_fixed_answer(ctx, st, IM_HERE, segment.speaker_name)
+            self._start_waiting(ctx, st, _Pending("phrase", segment.speaker_id, segment.speaker_name,
+                                                  segment.t_end, quiet=True))
+        elif question:
             self._start_answer(ctx, st, question, segment.speaker_name)
         else:
             self._start_waiting(ctx, st, _Pending("phrase", segment.speaker_id, segment.speaker_name,
@@ -365,6 +407,8 @@ class Engine:
             await asyncio.sleep(wait)
             if st.pending is pending:
                 st.pending = None
+                if pending.quiet:
+                    return
                 self._start_fixed_answer(ctx, st, NO_QUESTION, pending.speaker_name)
                 self._remember_missed(st, pending, wait)
 

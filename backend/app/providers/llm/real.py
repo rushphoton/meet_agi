@@ -17,7 +17,10 @@ FAILURE IT PREVENTS
   are silent the model may answer from general knowledge, but the first
   sentence must say "That's not in your documents, but generally ..." - and
   if the model reports it used no document yet forgot to say so, the
-  sentence is added here (Ray, 27 Sep 2026; replaces DESIGN.md §8 decision 9).
+  sentence is added here (Ray, 27 Sep 2026; replaces DESIGN.md §8 decision 9) -
+  once: if the model already said it in other words ("that is not in your
+  docs") it is not doubled. The model labels each answer documents / general /
+  conversational; "are you here?" gets a plain reply with no disclaimer.
 - An answer the room can't use when cut off: 2-5 complete spoken sentences,
   most important first, so "stop talking" part-way still leaves sense.
 - A model reply that is almost right (a confidence of 1.3, a topic of 200
@@ -31,7 +34,8 @@ import json
 from ...contract.events import Alert, TranscriptSegment
 from ...knowledge import Passage
 from .base import (
-    NOT_IN_DOCS, ActionItem, AnswerDraft, CheapCheck, LLMError, SummaryDraft, Verdict, WakeCheck,
+    ANSWER_SOURCES, NOT_IN_DOCS, ActionItem, AnswerDraft, CheapCheck, LLMError, SummaryDraft, Verdict, WakeCheck,
+    with_not_in_docs, without_not_in_docs,
 )
 from .vendors import VendorClient
 
@@ -132,10 +136,16 @@ or "it"; captions may misspell words, e.g. "bortech" for "board deck").
 Form: 2 to 5 complete spoken sentences, at most {max_words} words in total, the most important fact \
 FIRST, so the answer still makes sense if someone says "stop talking" after any sentence. Speak \
 naturally: no lists, no markdown, numbers written as people say them.
-Sources: prefer the numbered document passages and name the document you used in plain words \
-(e.g. "the board deck"). If the passages do not answer it, answer from general knowledge and begin \
-the first sentence with exactly "{not_in_docs}" - never present general knowledge as coming from \
-the documents. from_documents is true only if the answer comes from the passages.
+Sources - set "source" to exactly one of:
+- "documents": the answer comes from the numbered passages; name the document in plain words \
+(e.g. "the board deck").
+- "general": the passages do not answer it, so you answer from general knowledge. Do NOT write any \
+"not in your documents" phrase yourself: the system starts your answer with "{not_in_docs}, ..." for you. \
+Never present general knowledge as coming from the documents.
+- "conversational": the speaker is only greeting you or checking you are there ("are you here?", \
+"can you hear me?", "wake up", "thanks"). Reply with one or two short natural sentences (e.g. "Yes, \
+I'm here. What's your question?"); do not mention documents.
+from_documents is true only for "documents".
 chat_line: the answer as one short line for the meeting chat (under 300 characters), with figures.
 Record your result with the record_answer tool."""
 
@@ -145,9 +155,10 @@ ANSWER_SCHEMA = {
         "spoken": {"type": "string"},
         "chat_line": {"type": "string"},
         "passage_numbers": {"type": "array", "items": {"type": "integer"}},
+        "source": {"type": "string", "enum": list(ANSWER_SOURCES)},
         "from_documents": {"type": "boolean"},
     },
-    "required": ["spoken", "chat_line", "passage_numbers", "from_documents"],
+    "required": ["spoken", "chat_line", "passage_numbers", "source", "from_documents"],
 }
 
 WAKE_SYSTEM = """A meeting has an AI assistant called "AGI" (Meet AGI). People wake it by saying \
@@ -267,12 +278,16 @@ class RealProvider:
         if not spoken:
             raise LLMError("answer was empty")
         indexes = _indexes(d.get("passage_numbers"), len(passages))
-        from_docs = d.get("from_documents")
-        if (from_docs is False or (from_docs is None and not indexes)) and not spoken.lower().startswith(
-                NOT_IN_DOCS.lower()[:28]):
-            # The model answered from general knowledge but did not say so first: say it for it.
-            spoken = f"{NOT_IN_DOCS}, {spoken[0].lower()}{spoken[1:]}"
-        if from_docs is False:
+        source = d.get("source") if d.get("source") in ANSWER_SOURCES else None
+        if source is None:   # an older-style reply: fall back on from_documents / cited passages
+            from_docs = d.get("from_documents")
+            source = "general" if (from_docs is False or (from_docs is None and not indexes)) else "documents"
+        if source == "general":
+            # Say it first - once. The model is told not to; if it did anyway, however worded, it isn't doubled.
+            spoken = with_not_in_docs(spoken)
+            indexes = []
+        elif source == "conversational":
+            spoken = without_not_in_docs(spoken)   # "are you here?" needs no disclaimer
             indexes = []
         return AnswerDraft(spoken=spoken, chat_line=" ".join(str(d.get("chat_line") or spoken).split()),
                            passage_indexes=indexes, model=used)
