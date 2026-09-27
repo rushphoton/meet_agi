@@ -105,7 +105,9 @@ class WakeSettings(_Model):
         "hey gi", "hey g i",
         # Ray's feedback after the live test (27 Sep 2026): captions also wrote "giant" and "GI Joe".
         # The engine also matches near-misses after "hey/hi/ok" and confirms them with the cheap model.
-        "hey giant", "hey gi joe", "hey ajay", "hey aj", "hey edgy",
+        "hey giant", "hey gi joe", "hey edgy",
+        # Not "hey aj"/"hey ajay": a colleague named Ajay would wake the bot. The sounds-like layer still
+        # catches them, after a quick check that the speaker is addressing the bot.
     ]
     max_word_position: int = 3
     # 15 s (was 8): in the live test the question came after the filler line, too late.

@@ -342,6 +342,14 @@ Each is final for the lanes. Ray can override any of them on `main`.
 
 ---
 
+
+**Changes after the first live Meet test (27 Sep 2026, Ray's feedback; these override the sections above where they differ):**
+- Wake: exact variants (now including Meet caption spellings "hey gi", "hey giant", "hey gi joe", "hey edgy") wake at once; other "hey/hi/ok + sounds-like-AGI" phrases are confirmed by one cheap-model check (fallback: only strong tokens wake).
+- Stop: "stop talking", "be quiet", "that's enough", "stop" and similar work without saying AGI, from anyone, but only while an answer is being prepared, queued or playing, or within 5 s after (§4.5 updated in spirit).
+- Answers: 2-5 complete sentences, up to 120 words (was 60), spoken sentence by sentence; stop drops the remaining sentences (with Attendee the current sentence finishes).
+- Documents silent: the bot answers from general knowledge and says so first ("That's not in your documents, but generally ..."), replacing §8 decision 9.
+- Disputes: a single speaker correcting or doubting themselves is flagged too; when the documents don't settle it the alert says so.
+
 ## 9. Cut list (in the order things get cut)
 
 1. Clarifying questions (bot asks back when a question is ambiguous)

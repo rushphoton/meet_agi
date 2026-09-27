@@ -862,8 +862,6 @@ export interface components {
              *         "hey g i",
              *         "hey giant",
              *         "hey gi joe",
-             *         "hey ajay",
-             *         "hey aj",
              *         "hey edgy"
              *       ]
              *     }
@@ -1090,8 +1088,6 @@ export interface components {
              *       "hey g i",
              *       "hey giant",
              *       "hey gi joe",
-             *       "hey ajay",
-             *       "hey aj",
              *       "hey edgy"
              *     ]
              */
