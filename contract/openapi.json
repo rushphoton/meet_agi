@@ -1241,7 +1241,9 @@
                 "hey a gi",
                 "hey ag i",
                 "hi agi",
-                "hey agee"
+                "hey agee",
+                "hey gi",
+                "hey g i"
               ]
             }
           }
@@ -1736,7 +1738,9 @@
               "hey a gi",
               "hey ag i",
               "hi agi",
-              "hey agee"
+              "hey agee",
+              "hey gi",
+              "hey g i"
             ],
             "items": {
               "type": "string"

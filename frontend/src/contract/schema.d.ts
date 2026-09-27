@@ -845,7 +845,9 @@ export interface components {
              *         "hey a gi",
              *         "hey ag i",
              *         "hi agi",
-             *         "hey agee"
+             *         "hey agee",
+             *         "hey gi",
+             *         "hey g i"
              *       ]
              *     }
              */
@@ -1066,7 +1068,9 @@ export interface components {
              *       "hey a gi",
              *       "hey ag i",
              *       "hi agi",
-             *       "hey agee"
+             *       "hey agee",
+             *       "hey gi",
+             *       "hey g i"
              *     ]
              */
             variants: string[];
