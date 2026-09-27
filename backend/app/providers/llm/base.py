@@ -17,6 +17,7 @@ the dashboard sees is the contract's Alert / SpokenAnswer / MeetingSummary.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -116,3 +117,44 @@ class LLMProvider(Protocol):
 # When the documents are silent the bot answers from general knowledge and says so FIRST (Ray,
 # 27 Sep 2026; replaces DESIGN §8 decision 9's "I couldn't find that in our documents").
 NOT_IN_DOCS = "That's not in your documents, but generally"
+
+# Where an answer came from (the answer model says which). Only "general" gets the NOT_IN_DOCS opening;
+# "conversational" ("are you here?", "can you hear me?") gets a plain short reply (Ray's live lines, 27 Sep).
+ANSWER_SOURCES = ("documents", "general", "conversational")
+
+_NOT_IN_DOCS_SAID = re.compile(r"\bnot in (?:your|our|the) documents\b")
+_NOT_IN_DOCS_LEAD = re.compile(
+    r"^\s*(?:that(?:'s|’s|\s+is)\s+not|that\s+isn(?:'|’)t|it(?:'s|’s|\s+is)\s+not|it\s+isn(?:'|’)t)\s+in\s+"
+    r"(?:your|our|the)\s+(?:documents|docs)\s*,?\s*(?:but\s+generally(?:\s+speaking)?\s*,?\s*)?",
+    re.IGNORECASE)
+
+
+def _first_sentence(text: str) -> str:
+    return re.split(r"(?<=[.!?])\s+", text.strip(), maxsplit=1)[0]
+
+
+def says_not_in_docs(text: str) -> bool:
+    """True when the FIRST sentence already says the answer isn't from the documents, however it is
+    worded: "that's"/"that is", "isn't"/"is not", "documents"/"docs". Stops the doubled
+    "That's not in your documents, but generally, that is not in your documents, ..." heard live."""
+    s = _first_sentence(text).lower().replace("’", "'")
+    s = re.sub(r"\bthat's\b", "that is", s)
+    s = re.sub(r"\bit's\b", "it is", s)
+    s = re.sub(r"\bisn't\b", "is not", s)
+    s = re.sub(r"\bdocs\b", "documents", s)
+    return bool(_NOT_IN_DOCS_SAID.search(s))
+
+
+def with_not_in_docs(text: str) -> str:
+    """The general-knowledge opening, added once."""
+    if says_not_in_docs(text):
+        return text
+    return f"{NOT_IN_DOCS}, {text[0].lower()}{text[1:]}" if text else NOT_IN_DOCS + "."
+
+
+def without_not_in_docs(text: str) -> str:
+    """A conversational reply ("Yes, I'm here") must not open with "That's not in your documents"."""
+    stripped = _NOT_IN_DOCS_LEAD.sub("", text, count=1).strip()
+    if stripped == text.strip() or not stripped:
+        return text
+    return stripped[0].upper() + stripped[1:]

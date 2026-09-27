@@ -23,6 +23,11 @@ FAILURE IT PREVENTS
   stop.", "Stop, thanks") - never "Stop the recording please" or "Fair
   enough". The engine also only listens for them while the bot is speaking.
 
+- "Agi wake up!" and "AGI, what's churn?" (no greeting) being ignored: an
+  AGI-like word OPENING the sentence and used to address the bot is a wake
+  candidate too; "AGI is a big topic" (talk ABOUT it) is not (round 3).
+- "Agi wake up!" being answered as if "wake up" were a question.
+
 No AI model is involved in this file: it must be instant and never cost money.
 """
 from __future__ import annotations
@@ -206,3 +211,97 @@ def looks_like_question(text: str) -> bool:
             continue
         return t in _QUESTION_WORDS
     return False
+
+
+# ======================= "AGI, ..." with no greeting (Ray's live lines, 27 Sep 2026, round 3) =======================
+# Meet wrote "Agi wake up!" and "AGI, what's churn?": no "hey", so nothing above woke the bot. A sentence
+# that OPENS with an AGI-like word (after fillers only) and is shaped like talking TO someone is a wake
+# candidate. "AGI is a big topic" opens the same way but is talk ABOUT it: the word after "AGI" decides.
+EXACT_ADDRESS_TOKENS = {"agi", "aji"}          # "a g i", "a gi", "ag i" are joined to "agi" first
+# Words right after "AGI" (no comma) that make it an address: a question word or a request.
+_ADDRESS_NEXT = {"what", "whats", "how", "why", "when", "where", "who", "whose", "which", "tell", "give",
+                 "explain", "remind", "please", "wake", "show", "find", "check", "look", "summarize",
+                 "summarise", "repeat", "say", "read", "hello", "hi", "hey"}
+_ADDRESS_NEXT_PAIR = {("are", "you"), ("can", "you"), ("could", "you"), ("do", "you"), ("did", "you"),
+                      ("will", "you"), ("would", "you"), ("you", "there"), ("you", "awake")}
+# After "AGI," (a pause) these may open a question too: "AGI, is Q3 up?".
+_AUX = {"is", "are", "was", "were", "can", "could", "do", "does", "did", "will", "would", "should", "have", "has"}
+# Sounds-like words accepted at the very start of a sentence. Narrower than after a greeting: common
+# words ("again", "agreed", "given") and first names ("Joe", "Ajay") start sentences all the time.
+_INITIAL_SOUNDS_LIKE_EXCLUDE = {"age", "ago", "api", "joe", "ajay", "aj"}
+_PAUSE = re.compile(r"\s*[,.!?;:\-–—]")
+
+
+@dataclass(frozen=True)
+class DirectAddress:
+    variant: str           # what was heard, normalised: "agi", "a g i", "aggie"
+    token: str             # joined AGI-like word: "agi", "aggie"
+    exact: bool            # "agi"/"a g i"/"aji" (True) or only sounds like it (False)
+    clear: bool            # shaped like a request or question to the bot: exact + clear wakes at once
+    question: str | None   # rest of the sentence, original wording
+
+
+def _initial_sounds_like(token: str) -> bool:
+    if token in _INITIAL_SOUNDS_LIKE_EXCLUDE or len(token) < 2:
+        return False
+    return token in STRONG_TOKENS or token in {"aggie", "agie", "ajee", "ajie", "agee", "edgy", "giant"} or (
+        min(_edit_distance(token, t) for t in _CLOSE_TARGETS) <= 1)
+
+
+def detect_direct_address(text: str, max_word_position: int = 3) -> DirectAddress | None:
+    """ "AGI, what's churn?" / "Agi wake up!" / "Okay AGI tell me the margin": an AGI-like word opening
+    the sentence (fillers only before it) and used as a form of address. None for "AGI is a big topic".
+    - exact word + clear shape  -> the engine wakes at once;
+    - exact word, unclear shape ("AGI, as a concept, is overhyped") or a sounds-like word ("Aggie,
+      what's churn?") -> the engine asks the cheap model first."""
+    words = _words_with_spans(text)
+    tokens = [w for w, _, _ in words]
+    for start in range(min(max_word_position, len(tokens))):
+        if any(w not in OPENERS for w in tokens[:start]):
+            return None
+        for span in (3, 2, 1):
+            part = tokens[start:start + span]
+            if len(part) < span or (span > 1 and any(len(w) > 2 for w in part)):
+                continue
+            joined = "".join(part)
+            exact = joined in EXACT_ADDRESS_TOKENS
+            if not exact and (span > 1 or not _initial_sounds_like(joined)):
+                continue
+            end = start + span
+            end_char = words[end - 1][2]
+            rest = text[end_char:].strip().lstrip(",.!?;:-– ").strip()
+            after = tokens[end:]
+            paused = bool(_PAUSE.match(text, end_char)) or not after
+            nxt = after[0] if after else ""
+            pair = tuple(after[:2])
+            request = nxt in _ADDRESS_NEXT or pair in _ADDRESS_NEXT_PAIR
+            if paused:
+                clear = not after or request or nxt in _AUX or looks_like_question(rest)
+            else:
+                clear = request
+                if not clear and "?" not in text:
+                    return None   # "AGI is a big topic", "Giant steps were taken": talk ABOUT, not TO
+            return DirectAddress(variant=" ".join(part), token=joined, exact=exact, clear=clear,
+                                 question=rest if _WORD.search(rest.lower()) else None)
+        if tokens[start] not in OPENERS:
+            return None
+    return None
+
+
+# ======================= "wake up" is not a question =======================
+_SUMMONS = {"wake up", "wake", "wakey wakey", "you awake", "are you awake", "hello", "hi", "hey", "yo",
+            "wake up wake up"}
+_SUMMONS_TRIM = {"please", "now", "agi", "aji", "buddy", "there"}
+
+
+def is_summons(question: str | None) -> bool:
+    """True when the "question" after a wake only calls the bot ("wake up!", "hello?"): the bot then
+    says it is listening instead of answering "wake up" as a question."""
+    if not question:
+        return False
+    tokens = normalize(question).split()
+    while tokens and tokens[-1] in _SUMMONS_TRIM:
+        tokens.pop()
+    while tokens and tokens[0] in _SUMMONS_TRIM:
+        tokens.pop(0)
+    return " ".join(tokens) in _SUMMONS
