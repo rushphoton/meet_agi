@@ -106,3 +106,61 @@ def test_a_used_up_gemini_quota_moves_to_the_backup_model_with_its_own_quota(mon
     result = asyncio.run(_gemini(handler, monkeypatch).cheap_check("gemini-3.5-flash-lite", LINES, PASSAGES, []))
     assert result.model == "gemini-2.5-flash-lite"
     assert seen == ["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite"]
+
+
+# ---- item 3: go.py shut everything down 10 s after READY when the tunnel retry had succeeded -------
+import importlib.util  # noqa: E402
+import os  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def _load_go():
+    spec = importlib.util.spec_from_file_location("go_under_test", ROOT / "scripts" / "go.py")
+    go = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(go)
+    return go
+
+
+def test_tunnel_retry_succeeded_then_go_py_shut_everything_down(tmp_path, monkeypatch):
+    go = _load_go()
+    monkeypatch.setattr(go, "LOGS", tmp_path)
+    first, _ = go.start("tunnel", [sys.executable, "-c", "import sys; sys.exit(1)"])   # ERR_NGROK_334 attempt
+    first.wait(timeout=10)
+    second, _ = go.start("tunnel", [sys.executable, "-c", "import time; time.sleep(30)"])  # the retry that works
+    try:
+        assert go.dead_parts() == []
+    finally:
+        second.kill()
+        second.wait(timeout=10)
+
+
+def test_reusing_an_earlier_ngrok_made_go_py_shut_everything_down():
+    src = (ROOT / "scripts" / "go.py").read_text(encoding="utf-8")
+    reuse = src.index("already running from an earlier ngrok")
+    assert 'running.pop("tunnel", None)' in src[reuse:reuse + 300]
+
+
+def test_a_part_that_really_crashes_is_still_caught(tmp_path, monkeypatch):
+    go = _load_go()
+    monkeypatch.setattr(go, "LOGS", tmp_path)
+    p, _ = go.start("backend", [sys.executable, "-c", "import sys; sys.exit(3)"])
+    p.wait(timeout=10)
+    assert go.dead_parts() == ["backend"]
+
+
+def test_go_py_failing_after_ready_left_the_bot_in_the_call(tmp_path, monkeypatch):
+    go = _load_go()
+    ended = []
+    monkeypatch.setattr(go, "LOGS", tmp_path)
+    monkeypatch.setattr(go, "end_live_meetings", lambda why: ended.append(why))
+    backend, _ = go.start("backend", [sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        go.fail("A part stopped unexpectedly: tunnel.", "test")
+    except SystemExit:
+        pass
+    assert ended == ["Stopping after a failure"]
+    assert backend.poll() is not None      # and everything was still stopped

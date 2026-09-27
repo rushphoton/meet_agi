@@ -44,6 +44,9 @@ BACKEND = "http://127.0.0.1:8000"
 DASHBOARD = "http://localhost:3000"          # what Ray opens in Chrome
 DASHBOARD_CHECK = "http://127.0.0.1:3000"    # what this script checks (localhost may mean IPv6 ::1)
 children: list[subprocess.Popen] = []
+# The latest process started under each name. The watchdog checks only these, so a first ngrok attempt that
+# exited with ERR_NGROK_334 before a successful retry no longer counts as "a part stopped" (gate v0.1, item 3).
+running: dict[str, subprocess.Popen] = {}
 
 
 def say(ok: bool | None, text: str) -> None:
@@ -79,6 +82,10 @@ def stop(code: int = 0) -> None:
 
 def fail(text: str, fix: str, log: Path | None = None) -> None:
     say(False, text)
+    backend = running.get("backend")
+    if backend is not None and backend.poll() is None:
+        # While the backend still answers, end any live meeting so the bot leaves the call (gate v0.1, item 3).
+        end_live_meetings("Stopping after a failure")
     if log and log.exists():
         tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-15:]
         print("      last lines of " + str(log.relative_to(ROOT)) + ":")
@@ -98,7 +105,13 @@ def start(name: str, cmd: list[str], cwd: Path = ROOT, env: dict | None = None) 
              else {"start_new_session": True})
     p = subprocess.Popen(cmd, cwd=cwd, env=env or os.environ.copy(), stdout=fh, stderr=subprocess.STDOUT, **group)
     children.append(p)
+    running[name] = p
     return p, log
+
+
+def dead_parts() -> list[str]:
+    """Names of watched parts that have exited with an error."""
+    return [name for name, p in running.items() if p.poll() is not None and p.returncode not in (0, None)]
 
 
 def wait_until(check, proc: subprocess.Popen, seconds: float) -> bool:
@@ -177,6 +190,7 @@ def run_tunnel(public_url: str) -> None:
         if "ERR_NGROK_334" in text or "already online" in text:
             if _tunnel_reaches_backend(public_url):
                 say(True, "Public tunnel already running from an earlier ngrok on this laptop - using it")
+                running.pop("tunnel", None)   # our own attempt exited; the earlier ngrok is not ours to watch
                 return
             if attempt == 1:
                 say(None, "An old ngrok is holding the tunnel address - stopping it and retrying ...")
@@ -278,9 +292,9 @@ def main() -> None:
         webbrowser.open(DASHBOARD)
         seen: set[str] = set()
         while True:
-            dead = [p for p in children if p.poll() is not None and p.returncode not in (0, None)]
+            dead = dead_parts()
             if dead:
-                fail("A part stopped unexpectedly.", "Copy data/logs/*.log lines into the Claude chat, then run this again.")
+                fail("A part stopped unexpectedly: " + ", ".join(dead) + ".", "Copy data/logs/*.log lines into the Claude chat, then run this again.")
             try:
                 for w in httpx.get(BACKEND + "/api/health", timeout=3).json().get("warnings", []):
                     if w not in seen:
