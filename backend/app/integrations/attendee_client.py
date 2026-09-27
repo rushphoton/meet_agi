@@ -146,8 +146,9 @@ AUDIO_WARNING_KEY = "meeting.attendee.audio"
 AUDIO_WARNING = "Attendee refusing audio - answers go to chat only"
 CHAT_WARNING_KEY = "meeting.attendee.chat"
 CHAT_WARNING = "Attendee refusing chat - alerts and answers on the dashboard only"
-STOP_LIMIT_NOTE = ("Bot provider Attendee (DESIGN R1 fallback): 'AGI, stop talking' drops queued answers "
-                   "but cannot cut a clip already playing (Attendee has no stop-audio call)")
+STOP_LIMIT_NOTE = ("Bot provider Attendee (DESIGN R1 fallback): 'stop talking' drops the rest of the answer "
+                   "but cannot cut a clip already playing (Attendee has no stop-audio call), so the current "
+                   "sentence finishes")
 
 # Attendee bot state -> the contract's BotStatus.status (DESIGN §4.3). None = no change to report.
 STATE_MAP: dict[str, str | None] = {
@@ -254,8 +255,9 @@ class AttendeeClient:
 
     async def stop_audio(self, bot_id: str) -> None:
         """Attendee has no call that stops or cuts audio (see RESEARCH). The audio queue has
-        already dropped everything not yet sent, and it sends one clip at a time, so at most
-        the clip already playing (an answer is <=60 words, ~20 s) finishes. Recorded, not faked."""
+        already dropped everything not yet sent, and it sends one SENTENCE clip at a time
+        (speech/sentences.py), so at most the sentence already playing (a few seconds)
+        finishes. Recorded, not faked."""
         self.stop_requests += 1
         log.info("Attendee cannot cut audio for bot %s: queued answers were dropped; "
                  "a clip already playing finishes", bot_id)
