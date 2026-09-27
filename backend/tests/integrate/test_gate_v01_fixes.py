@@ -53,3 +53,56 @@ def test_a_later_default_change_reaches_settings_saved_from_the_dashboard(tmp_pa
     s = settings_mod.SettingsStore(tmp_path).get()
     assert s.fillers == new_fillers
     assert s.answer_max_words == 80
+
+
+# ---- item 2: a Gemini rate limit made the bot apologize on stage -----------------------------------
+import asyncio  # noqa: E402
+
+import httpx  # noqa: E402
+
+from backend.app.providers.llm import RealProvider  # noqa: E402
+from backend.app.providers.llm import vendors  # noqa: E402
+from backend.app.providers.llm.vendors import VendorClient  # noqa: E402
+from backend.tests.engine.test_engine_providers import LINES, PASSAGES  # noqa: E402
+
+OK_CHECK = {"candidates": [{"content": {"parts": [
+    {"text": '{"worth_a_look": true, "score": 0.8, "topic": "Q3 revenue"}'}]}}]}
+RATE_LIMITED = {"error": {"message": "Resource has been exhausted (e.g. check quota)."}}
+
+
+def _gemini(handler, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-test-FAKE-not-a-real-key-000000000000000000")
+    monkeypatch.setattr(vendors, "RATE_LIMIT_PAUSE_SECONDS", 0.0)
+    return RealProvider(VendorClient(transport=httpx.MockTransport(handler)))
+
+
+def _model(request):
+    return request.url.path.split("/")[-1].split(":")[0]
+
+
+def test_one_gemini_rate_limit_made_the_bot_say_it_could_not_look_that_up(monkeypatch):
+    seen = []
+
+    def handler(request):
+        seen.append(_model(request))
+        if len(seen) == 1:
+            return httpx.Response(429, json=RATE_LIMITED)
+        return httpx.Response(200, json=OK_CHECK)
+
+    result = asyncio.run(_gemini(handler, monkeypatch).cheap_check("gemini-3.5-flash-lite", LINES, PASSAGES, []))
+    assert result.worth_a_look
+    assert seen == ["gemini-3.5-flash-lite", "gemini-3.5-flash-lite"]
+
+
+def test_a_used_up_gemini_quota_moves_to_the_backup_model_with_its_own_quota(monkeypatch):
+    seen = []
+
+    def handler(request):
+        seen.append(_model(request))
+        if _model(request) == "gemini-3.5-flash-lite":
+            return httpx.Response(429, json=RATE_LIMITED)
+        return httpx.Response(200, json=OK_CHECK)
+
+    result = asyncio.run(_gemini(handler, monkeypatch).cheap_check("gemini-3.5-flash-lite", LINES, PASSAGES, []))
+    assert result.model == "gemini-2.5-flash-lite"
+    assert seen == ["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite"]

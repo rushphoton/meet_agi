@@ -13,6 +13,9 @@ FAILURE IT PREVENTS
 - A retired model name silently breaking everything: if the chosen model is
   rejected as unknown (HTTP 404/400 mentioning the model), the call retries
   once with the fallback model from DESIGN.md §3.5.
+- A busy or used-up quota (HTTP 429/503) making the bot apologize on stage:
+  wait RATE_LIMIT_PAUSE_SECONDS and retry once; if still refused, move to the
+  fallback model, which has its own quota (gate v0.1, item 2).
 
 DEPENDENCIES (CLAUDE.md rule 4)
 httpx only (already in backend/requirements.txt). The official `anthropic`
@@ -23,6 +26,7 @@ or needing their automatic retries.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -32,6 +36,7 @@ import httpx
 from .base import LLMError
 
 TIMEOUT_SECONDS = 8.0
+RATE_LIMIT_PAUSE_SECONDS = 1.0
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 FALLBACKS = {
@@ -84,6 +89,15 @@ class VendorClient:
             fallback = FALLBACKS.get(model)
             if fallback and re.search(r"HTTP (400|404)", str(exc)) and "model" in str(exc).lower():
                 return await call(fallback)
+            if not _busy(exc):
+                raise
+        await asyncio.sleep(RATE_LIMIT_PAUSE_SECONDS)
+        try:
+            return await call(model)
+        except LLMError as exc:
+            fallback = FALLBACKS.get(model)
+            if fallback and _busy(exc):
+                return await call(fallback)
             raise
 
     # ---------------- Gemini ----------------
@@ -124,6 +138,11 @@ class VendorClient:
             return parse_claude_tool(data, tool_name), m
 
         return await self._with_fallback(model, call)
+
+
+def _busy(exc: LLMError) -> bool:
+    """Rate limit or quota used up (429), or the vendor overloaded (503)."""
+    return bool(re.search(r"HTTP (429|503)", str(exc)))
 
 
 def _error_text(r: httpx.Response) -> str:
