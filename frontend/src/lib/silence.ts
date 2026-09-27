@@ -13,6 +13,18 @@
 import type { BotStatusValue } from "./contract";
 
 export const SILENCE_LIMIT_SECONDS = 30;
+/**
+ * Gate v0.1, item 8: Attendee sends nothing while the room is quiet (no heartbeat), so 30 s of quiet
+ * turned the projector red mid-demo. Between 30 s and this limit the notice is a grey "quiet"; only
+ * after it does it turn red. Recall keeps retrying webhooks for about 60 s, Attendee's captions come
+ * every few seconds while anyone speaks, so 2 minutes of nothing is worth an alarm.
+ */
+export const SILENCE_ALARM_SECONDS = 120;
+
+/** "alarm" (red: check the laptop, VPN, ngrok) or "quiet" (grey: probably nobody is speaking). */
+export function silenceLevel(seconds: number): "quiet" | "alarm" {
+  return seconds >= SILENCE_ALARM_SECONDS ? "alarm" : "quiet";
+}
 
 export interface SilenceInput {
   ended: boolean;

@@ -5,7 +5,7 @@
  * the call yet, or the meeting is over.
  */
 import { describe, expect, it } from "vitest";
-import { silenceSeconds, type SilenceInput } from "./silence";
+import { silenceLevel, silenceSeconds, type SilenceInput } from "./silence";
 
 const T0 = Date.parse("2026-09-24T10:00:00Z");
 const base: SilenceInput = {
@@ -44,5 +44,18 @@ describe("no warning when there is nothing wrong", () => {
     for (const s of ["joining", "waiting_room", "left", "failed", null, undefined] as const) {
       expect(silenceSeconds({ ...late, botStatus: s })).toBeNull();
     }
+  });
+});
+
+describe("gate v0.1, item 8: a quiet room turned the projector red", () => {
+  it("45 s of quiet is a grey note, not the red alarm", () => {
+    const s = silenceSeconds({ ...base, lastSegmentAt: at(0), nowMs: T0 + 45_000 });
+    expect(s).toBe(45);
+    expect(silenceLevel(s as number)).toBe("quiet");
+  });
+
+  it("2 minutes of nothing is the red alarm", () => {
+    expect(silenceLevel(119)).toBe("quiet");
+    expect(silenceLevel(120)).toBe("alarm");
   });
 });

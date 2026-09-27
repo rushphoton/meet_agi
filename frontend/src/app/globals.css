@@ -71,6 +71,7 @@ h3 { font-size: 15px; margin: 0 0 6px; }
 .banner { padding: 8px 20px; font-size: 13px; background: var(--warn-bg); color: var(--warn-fg); }
 .banner.danger, .notice-danger { background: #b3261e; color: #fff; }
 .notice-danger { padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-weight: 600; }
+.notice-quiet { background: #e8e8e8; color: #444; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; }
 .error { padding: 10px 14px; border-radius: 6px; background: var(--warn-bg); color: var(--warn-fg); margin-bottom: 16px; }
 
 .badge {

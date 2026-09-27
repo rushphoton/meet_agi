@@ -9,8 +9,8 @@
  * FAILURE IT PREVENTS
  * Being unable to see why the bot posted something, or to silence it fast,
  * while the meeting is still going. It also turns red when the bot is in the
- * call but no transcript has arrived for over 30 s (a dead laptop, VPN or
- * ngrok tunnel looks just like a quiet room otherwise).
+ * call but no transcript has arrived for 2 minutes (a dead laptop, VPN or
+ * ngrok tunnel); from 30 s it shows a grey "quiet" note instead.
  */
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -19,7 +19,7 @@ import AlertCard from "@/components/AlertCard";
 import AnswerList from "@/components/AnswerList";
 import Transcript from "@/components/Transcript";
 import { api, ApiError } from "@/lib/api";
-import { silenceSeconds } from "@/lib/silence";
+import { silenceLevel, silenceSeconds } from "@/lib/silence";
 import { useHealth } from "@/lib/useHealth";
 import { useMeetingStream } from "@/lib/useMeetingStream";
 
@@ -86,9 +86,14 @@ export default function LivePage() {
           ended, botStatus: record.bot_status, lastSegmentAt: state.lastSegmentAt,
           lastWebhookAt: health?.last_webhook_at, meetingStartedAt: record.started_at, nowMs: now,
         });
-        return silent === null ? null : (
+        if (silent === null) return null;
+        return silenceLevel(silent) === "alarm" ? (
           <div className="notice-danger" role="alert" data-testid="silence-warning">
             No transcript for {silent} s - check the laptop, VPN and ngrok.
+          </div>
+        ) : (
+          <div className="notice-quiet" data-testid="silence-quiet">
+            Quiet for {silent} s - normal if nobody is speaking in the Meet.
           </div>
         );
       })()}
