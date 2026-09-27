@@ -205,7 +205,7 @@ def run_dashboard() -> None:
     stale = (not build_id.exists() or build_id.stat().st_mtime < newest_source
              or not built_for.exists() or built_for.read_text(encoding="utf-8").strip() != BACKEND)
     if stale:
-        say(None, "Building the dashboard (about 1 minute) ...")
+        say(None, "Building the dashboard - only needed the first time and after an update (about 1 minute) ...")
         p, log = start("dashboard-build", [npm, "run", "build"], cwd=front, env=env)
         if p.wait() != 0:
             fail("Building the dashboard failed.", "Copy the lines above into the Claude chat.", log)
