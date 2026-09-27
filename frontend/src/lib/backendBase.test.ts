@@ -8,8 +8,8 @@ import { backendBase, upstreamEventsUrl } from "./backendBase";
 
 describe("failure paths", () => {
   it("unset, blank or trailing-slash settings still give a usable address", () => {
-    expect(backendBase("")).toBe("http://localhost:8000");
-    expect(backendBase("   ")).toBe("http://localhost:8000");
+    expect(backendBase("")).toBe("http://127.0.0.1:8000");
+    expect(backendBase("   ")).toBe("http://127.0.0.1:8000");
     expect(backendBase("http://127.0.0.1:8301//")).toBe("http://127.0.0.1:8301");
   });
 

@@ -40,7 +40,8 @@ from backend.app.settings import load_dotenv  # noqa: E402
 
 LOGS = ROOT / "data" / "logs"
 BACKEND = "http://127.0.0.1:8000"
-DASHBOARD = "http://localhost:3000"
+DASHBOARD = "http://localhost:3000"          # what Ray opens in Chrome
+DASHBOARD_CHECK = "http://127.0.0.1:3000"    # what this script checks (localhost may mean IPv6 ::1)
 children: list[subprocess.Popen] = []
 
 
@@ -177,7 +178,7 @@ def run_dashboard() -> None:
     if not npm:
         fail("npm (Node.js) was not found.", "Tell Claude 'npm missing'.")
     front = ROOT / "frontend"
-    if port_in_use(DASHBOARD):
+    if port_in_use(DASHBOARD_CHECK):
         fail("Something is already running on port 3000 (probably an old dashboard window).",
              "Close the other PowerShell window that runs the dashboard (or press Ctrl+C in it), then run this again.")
     if not (front / "node_modules").exists():
@@ -185,16 +186,25 @@ def run_dashboard() -> None:
         p, log = start("dashboard-install", [npm, "install", "--no-audit", "--no-fund"], cwd=front)
         if p.wait() != 0:
             fail("Installing the dashboard failed.", "Check the VPN/internet, then copy the lines above into the Claude chat.", log)
+    # The dashboard forwards its /api calls to the backend. Seen on Ray's laptop 27 Sep 2026:
+    # "connect ECONNREFUSED ::1:8000" - Windows resolves "localhost" to the IPv6 address ::1 first,
+    # but the backend listens on 127.0.0.1 only. So the dashboard is always pointed at 127.0.0.1,
+    # whatever .env says, and rebuilt when that address changes (Next.js fixes it at build time).
+    env = {**os.environ, "NEXT_PUBLIC_API_BASE": BACKEND}
     build_id = front / ".next" / "BUILD_ID"
+    built_for = front / ".next" / "meetagi-api-base.txt"
     newest_source = max(f.stat().st_mtime for f in (front / "src").rglob("*") if f.is_file())
-    if not build_id.exists() or build_id.stat().st_mtime < newest_source:
+    stale = (not build_id.exists() or build_id.stat().st_mtime < newest_source
+             or not built_for.exists() or built_for.read_text(encoding="utf-8").strip() != BACKEND)
+    if stale:
         say(None, "Building the dashboard (about 1 minute) ...")
-        p, log = start("dashboard-build", [npm, "run", "build"], cwd=front)
+        p, log = start("dashboard-build", [npm, "run", "build"], cwd=front, env=env)
         if p.wait() != 0:
             fail("Building the dashboard failed.", "Copy the lines above into the Claude chat.", log)
+        built_for.write_text(BACKEND, encoding="utf-8")
     say(None, "Starting the dashboard on http://localhost:3000 ...")
-    p, log = start("dashboard", [npm, "run", "start", "--", "-p", "3000"], cwd=front)
-    if not wait_until(lambda: httpx.get(DASHBOARD + "/api/health", timeout=3).status_code == 200, p, 60):
+    p, log = start("dashboard", [npm, "run", "start", "--", "-p", "3000"], cwd=front, env=env)
+    if not wait_until(lambda: httpx.get(DASHBOARD_CHECK + "/api/health", timeout=3).status_code == 200, p, 60):
         fail("The dashboard did not start.", "Copy the lines above into the Claude chat.", log)
     say(True, "Dashboard running and talking to the backend")
 

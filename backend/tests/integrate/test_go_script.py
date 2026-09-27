@@ -38,3 +38,15 @@ def test_go_when_an_old_ngrok_holds_the_tunnel_address_stops_it_retries_then_say
     assert r.returncode == 1, r.stdout
     assert "stopping it and retrying" in r.stdout
     assert "dashboard.ngrok.com/endpoints" in r.stdout
+
+
+def test_dashboard_forwarding_to_localhost_is_refused_on_windows_because_localhost_means_ipv6():
+    # Seen on Ray's laptop 27 Sep 2026: "connect ECONNREFUSED ::1:8000". The backend listens on
+    # 127.0.0.1 only, so go.py must point the dashboard at 127.0.0.1 (never "localhost") for both the
+    # build and the start, and check the dashboard at 127.0.0.1 too.
+    src = (ROOT / "scripts" / "go.py").read_text(encoding="utf-8")
+    assert 'BACKEND = "http://127.0.0.1:8000"' in src
+    assert '"NEXT_PUBLIC_API_BASE": BACKEND' in src
+    assert src.count("cwd=front, env=env") == 2          # build and start both get it
+    assert 'DASHBOARD_CHECK = "http://127.0.0.1:3000"' in src
+    assert "meetagi-api-base.txt" in src                  # rebuilt when the address changes
