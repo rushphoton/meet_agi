@@ -44,6 +44,25 @@ What went wrong, and what was done:
 4. **Not a bug, noted:** a bare "Hey AGI!" waits 8 s for the question. The question came 24 s later (after the filler line), so the bot said "Sorry, I didn't catch a question". Say it in one breath: "Hey AGI, what was…". A Wake pressed before the bot was admitted failed to post (the bot wasn't in the call yet).
 5. **The meeting is recorded with source "recall"** although it came through Attendee (known label issue, see assumptions).
 
+## Round 2: Ray's feedback after the live test (27 Sep 2026)
+
+| # | Ray said | Root cause | Fix (lane) | Proof |
+|---|---|---|---|---|
+| 1 | "AGI" gets captioned as giant, GI, GI Joe, so the bot misses it | only exact spellings were matched | More exact spellings, plus a sounds-like layer: "hey/hi/ok" followed by an AGI-like word is confirmed by one quick Gemini check (engine) | tests with the real caption lines; live: "Hey Aggie, what's a typical SaaS gross margin?" woke and was answered |
+| 2 | "Stop talking" should work without saying AGI, from anyone | stop phrases all contained "AGI" | "stop talking", "be quiet", "that's enough", "stop" and similar, from anyone, but only while the bot is answering or just after; bare "stop" must lead the sentence, so "Stop the recording please" doesn't count (contract defaults + engine) | tests; also fixed a real bug where "Fair enough, my mistake" had counted as a stop in the replay |
+| 3 | The bot should chime in when ONE person contradicts or doubts themselves | prompts looked for disagreement between people | New cheap-check and judge prompts list self-correction, hedging and right/wrong flip-flops; when the documents don't settle it, the alert says so (engine) | test with Ray's sequence; live Gemini: one alert, confidence 0.95, 3 s |
+| 4 | "Not very reactive" to Hey AGI questions | answers were limited to the documents; question wait was 8 s | Answers the question asked in 2–5 sentences; if the documents are silent it answers from general knowledge and says so first; question wait 15 s; a re-asked question within 35 s is answered (contract + engine) | tests; live answers in 0.7–1.4 s |
+| 5 | Longer answers that "stop talking" can cut part-way | one clip per answer; Attendee can't cut a playing clip | Up to 120 words; spoken sentence by sentence, and stop drops the remaining sentences (with Attendee the current sentence finishes) (contract + meeting) | tests: stop after sentence 2 means 3–5 never sent; first clip starts ~1 s after the answer instead of ~5 s |
+
+- Also: "hey aj"/"hey ajay" are not exact wake words, because a colleague named Ajay would wake the bot; the sounds-like check still catches them.
+- DESIGN.md has a note listing these overrides (before §9).
+- Proof: `python scripts/verify.py` → ALL CHECKS PASSED (312 tests, REPLAY OK). Dashboard 47 tests pass. Replay with real Gemini keys: REPLAY OK with real text.
+- New assumptions (engine r2, meeting r2) are in the lane reports summarized above. The main ones:
+  - a general-knowledge answer replaces DESIGN §8 decision 9;
+  - the question wait counts from the wake, not from the end of the filler;
+  - "words spoken before stop" is only in the log (a contract field `spoken_text` was requested but not added yet).
+- Not tested live yet: the sounds-like wake, stop mid-answer on Attendee, Inworld's voice across many short clips (pauses or pitch changes between sentences).
+
 ## Needs me
 
 1. **Before any real (non-fake) meeting: turn on Google billing** for the Gemini key at https://aistudio.google.com. On the free tier, Google says content is "used to improve our products".
