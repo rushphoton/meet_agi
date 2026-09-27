@@ -50,3 +50,39 @@ def test_dashboard_forwarding_to_localhost_is_refused_on_windows_because_localho
     assert src.count("cwd=front, env=env") == 2          # build and start both get it
     assert 'DASHBOARD_CHECK = "http://127.0.0.1:3000"' in src
     assert "meetagi-api-base.txt" in src                  # rebuilt when the address changes
+
+
+def test_ctrl_c_without_pressing_end_meeting_left_the_bot_in_the_call(tmp_path):
+    # Live test 27 Sep 2026: the window was stopped with Ctrl+C, the bot stayed in the Google Meet
+    # (still listening and billing) and the meeting never got its summary. Ctrl+C must end it first.
+    import json
+    import signal
+    import time
+
+    import httpx
+    import pytest
+    try:
+        httpx.get("http://127.0.0.1:8000/api/health", timeout=1)
+        pytest.skip("port 8000 is busy (a backend is already running)")
+    except httpx.HTTPError:
+        pass
+    out = tmp_path / "go.out"
+    env = {**os.environ, "OFFLINE": "1"}
+    p = subprocess.Popen([sys.executable, "scripts/go.py", "--no-tunnel", "--offline"], cwd=ROOT, env=env,
+                         stdout=open(out, "w"), stderr=subprocess.STDOUT,
+                         preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
+    try:
+        for _ in range(240):
+            if "READY" in out.read_text() or p.poll() is not None:
+                break
+            time.sleep(1)
+        assert "READY" in out.read_text(), out.read_text()[-2000:]
+        mid = httpx.post("http://127.0.0.1:8000/api/dev/meetings", json={"title": "left open"}).json()["meeting_id"]
+        p.send_signal(signal.SIGINT)                       # what Ctrl+C does
+        p.wait(timeout=90)
+    finally:
+        if p.poll() is None:
+            p.kill()
+    record = json.loads((ROOT / "data" / "meetings" / f"{mid}.json").read_text(encoding="utf-8"))["record"]
+    assert record["ended_at"] is not None and record["summary"] is not None
+    assert "ending \"left open\"" in out.read_text()

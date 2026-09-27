@@ -224,6 +224,8 @@ class RecallReceiver:
             return
         if event_name == "attendee.utterance":
             participant = {"name": data["speaker_name"]}
+            if self._is_the_bot_itself(participant):
+                return
             sentences = self._assembler(meeting_id).add(
                 data["speaker_id"], self._speaker_name(participant), self._attendee_words(meeting_id, data))
             await self._emit(meeting_id, sentences)
@@ -235,6 +237,8 @@ class RecallReceiver:
                       start=_rel(w.get("start_timestamp")),
                       end=_rel(w.get("end_timestamp") or w.get("start_timestamp")))
                  for w in inner.get("words") or [] if isinstance(w, dict)]
+        if self._is_the_bot_itself(participant):
+            return
         speaker_id = str(participant.get("id"))
         sentences = self._assembler(meeting_id).add(speaker_id, self._speaker_name(participant), words)
         await self._emit(meeting_id, sentences)
@@ -283,6 +287,13 @@ class RecallReceiver:
             queue = self._queues[meeting_id]
             self._timers[meeting_id] = asyncio.get_running_loop().call_later(
                 self.flush_after, queue.put_nowait, ("flush", {}))
+
+    def _is_the_bot_itself(self, participant: dict) -> bool:
+        """Live test 27 Sep 2026: Meet's captions include the bot's own voice ("Meet AGI: According to the
+        board deck..."). Fed back to the engine, the bot could flag or answer itself. Its own speech is
+        already shown under Spoken answers, so its captions are dropped here."""
+        name = str(participant.get("name") or "").strip().lower()
+        return bool(name) and name == self.rt.get_settings().bot_name.strip().lower()
 
     def _speaker_name(self, participant: dict) -> str:
         recall_name = str(participant.get("name") or "").strip()

@@ -17,11 +17,32 @@
   - A headless browser drove all three screens during a replay: the alert arrived live, the summary appeared, both follow-ups toggled and stayed toggled, the send-bot form returned the expected 503, and the health poll ran for 60 s with no errors.
 - **With real models:** since 25 Sep, every AI job (cheap check, judge, answer, summary) runs on `gemini-3.5-flash-lite` by default. Ray decided to wait on Anthropic credit (the account has none). The replay with real keys and these defaults gives `REPLAY OK`, with real Gemini text in the alert, the answer and the summary.
 - **Cost:** about US$0.19 per 30-minute meeting on Gemini's paid tier (estimate), or free on the free tier. See reviews/MeetAGI_cheap_model_alternatives.pdf.
+- **27 Sep: first live Google Meet test passed** (see the section below).
 - **Real meetings (25 Sep):** the bot can now join a real Google Meet through **Attendee**, using the key already in `.env` (`BOT_PROVIDER=attendee`). This is DESIGN risk R1's fallback, built by the meeting lane. It is tested against a fake Attendee; nothing has joined a real call yet.
   - Attendee can't cut a clip that is already playing: "AGI, stop talking" drops queued answers, but the one playing finishes (up to about 20 s).
   - Recall stays the design's vendor for later.
 - **One command for a real meeting:** `python scripts/go.py`. It starts the backend with real AI, the ngrok tunnel and the dashboard, checks each one, opens http://localhost:3000, and prints a plain fix when a step fails. Ctrl+C stops all three.
 - All of this ran in the cloud copy (Linux). Nothing has been run on Windows yet.
+
+## First live test: real Google Meet via Attendee (27 Sep 2026, HKT afternoon)
+
+Result: **it works end to end in a real call.** Ray hosted the Meet, admitted the bot, spoke test lines, and the bot heard, alerted and answered out loud. Measured from the saved meeting file (`data/meetings/mtg_e0cc6b011608.json`):
+
+| Measure | Target (DESIGN §6) | Live result | Verdict |
+|---|---|---|---|
+| Send → bot in the call (includes the host admitting it) | n/a | 53 s | depends on the host clicking Admit |
+| Disputed sentence → alert on the dashboard and in Meet chat | ≤ 8 s | 3 s (alert), 5 s (chat "sent") | pass |
+| "Hey AGI, what was Q3 revenue…" caption → answer queued / chat sent / voice playing | ≤ 10 s | 3 s / 5 s / 7 s | pass |
+| Answer content | from the documents | "Q3 revenue was 41.2 million dollars", citing the board deck | pass |
+| Transcript lines with the right speaker name | every line | yes ("Ray Wan") | pass |
+
+What went wrong, and what was done:
+
+1. **Meet captioned "Hey AGI" as "Hey GI" twice, and it didn't fire.** Added `hey gi` and `hey g i` to the wake variants (contract default on main), plus Ray's saved `data/settings.json`. Test: `test_hey_agi_captioned_by_meet_as_hey_gi_did_not_wake_the_bot`.
+2. **The bot heard its own voice.** Captions contained "Meet AGI: According to the board deck…", and those lines went to the engine, so it could have flagged or answered itself. The bot's own captions are now dropped (its speech is still shown under Spoken answers). Test: `test_bot_hears_its_own_voice_in_meet_captions_and_feeds_it_back_to_the_engine`.
+3. **After the test, the bot stayed in the Meet**, still recording and billing, and the meeting had no summary: the window was closed with Ctrl+C without pressing End meeting. That bot was told to leave (Attendee now shows it as `ended`). `go.py` now ends any open meeting on Ctrl+C (the bot leaves and the summary is written) and on start-up for anything a previous run left open. Test: `test_ctrl_c_without_pressing_end_meeting_left_the_bot_in_the_call`.
+4. **Not a bug, noted:** a bare "Hey AGI!" waits 8 s for the question. The question came 24 s later (after the filler line), so the bot said "Sorry, I didn't catch a question". Say it in one breath: "Hey AGI, what was…". A Wake pressed before the bot was admitted failed to post (the bot wasn't in the call yet).
+5. **The meeting is recorded with source "recall"** although it came through Attendee (known label issue, see assumptions).
 
 ## Needs me
 

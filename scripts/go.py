@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -55,8 +56,11 @@ def stop(code: int = 0) -> None:
         if p.poll() is None:
             if os.name == "nt":  # npm runs through a .cmd wrapper; kill the whole tree or node keeps port 3000
                 subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
-            else:
-                p.terminate()
+            else:  # each child leads its own process group (see start()), so this also stops npm's node
+                try:
+                    os.killpg(p.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
     for p in children:
         try:
             p.wait(timeout=10)
@@ -80,7 +84,11 @@ def start(name: str, cmd: list[str], cwd: Path = ROOT, env: dict | None = None) 
     LOGS.mkdir(parents=True, exist_ok=True)
     log = LOGS / f"{name}.log"
     fh = open(log, "w", encoding="utf-8")
-    p = subprocess.Popen(cmd, cwd=cwd, env=env or os.environ.copy(), stdout=fh, stderr=subprocess.STDOUT)
+    # Own process group: Ctrl+C in this window must reach only go.py, which first ends the meeting
+    # (needs the backend still up) and then stops the children itself.
+    group = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
+             else {"start_new_session": True})
+    p = subprocess.Popen(cmd, cwd=cwd, env=env or os.environ.copy(), stdout=fh, stderr=subprocess.STDOUT, **group)
     children.append(p)
     return p, log
 
@@ -209,6 +217,28 @@ def run_dashboard() -> None:
     say(True, "Dashboard running and talking to the backend")
 
 
+def end_live_meetings(why: str) -> None:
+    """Live test 27 Sep 2026: the window was closed with Ctrl+C without pressing "End meeting", so the
+    bot stayed in the Google Meet, still listening and billing, and the meeting never got its summary.
+    Ending every unfinished meeting (the bot leaves, the summary is written) on stop - and on start, for
+    anything a previous run left open - prevents that."""
+    try:
+        items = httpx.get(BACKEND + "/api/meetings", timeout=5).json()
+        for item in items:
+            rec = httpx.get(f"{BACKEND}/api/meetings/{item['meeting_id']}", timeout=5).json()
+            if rec.get("ended_at") is None:
+                say(None, f'{why}: ending "{rec["title"]}" (the bot leaves, the summary is written) ...')
+                httpx.post(f"{BACKEND}/api/meetings/{rec['meeting_id']}/end", timeout=30)
+                deadline = time.time() + 30
+                while time.time() < deadline:
+                    if httpx.get(f"{BACKEND}/api/meetings/{rec['meeting_id']}", timeout=5).json().get("summary"):
+                        break
+                    time.sleep(1)
+    except (httpx.HTTPError, ValueError, KeyError):
+        say(False, "Could not end the open meeting. If the bot is still in your Meet, remove it there, "
+                   "or run: python scripts/end_all_bots.py")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Start Meet AGI for a real meeting.")
     parser.add_argument("--offline", action="store_true", help="canned AI, no vendor calls")
@@ -230,6 +260,7 @@ def main() -> None:
 
     try:
         run_backend(args.offline)
+        end_live_meetings("Left open by an earlier run")
         if not args.no_tunnel:
             run_tunnel(public_url)
         run_dashboard()
@@ -252,6 +283,7 @@ def main() -> None:
             time.sleep(10)
     except KeyboardInterrupt:
         print("\nStopping everything ...")
+        end_live_meetings("Stopping")
         stop(0)
 
 

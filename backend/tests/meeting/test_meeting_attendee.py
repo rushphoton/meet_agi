@@ -444,3 +444,18 @@ def test_hey_agi_over_attendee_speaks_the_answer_and_posts_chat(attendee_app, fa
         assert chat["to"] == "everyone" and chat["message"].startswith("Because you asked:") and len(chat["message"]) <= 500
         assert [c["status"] for c in record["chat_posts"]][-1] == "sent"
         assert client.get("/api/health").json()["warnings"] == []
+
+
+def test_bot_hears_its_own_voice_in_meet_captions_and_feeds_it_back_to_the_engine(attendee_app):
+    """Live test 27 Sep 2026: captions included 'Meet AGI: According to the board deck, Q3 Revenue was
+    41.2 million dollars.' The bot's own speech must never become a transcript line the engine judges."""
+    client, _ = attendee_app()
+    with client:
+        m = _launch(client).json()
+        own = caption(m["recall_bot_id"], "According to the board deck, Q3 revenue was rising.",
+                      speaker="spaces/x/devices/999", name="Meet AGI")
+        human = caption(m["recall_bot_id"], "Thanks, that helps.", offset_s=5.0)
+        assert _hook(client, own).status_code == 200 and _hook(client, human).status_code == 200
+        wait_for(lambda: _record(client, m)["segments"])
+        time.sleep(1.5)   # longer than the pause that would flush a held sentence
+        assert [s["speaker_name"] for s in _record(client, m)["segments"]] == ["Tom Walsh"]
