@@ -158,7 +158,7 @@ def test_canned_provider_says_it_is_canned_everywhere():
     empty = asyncio.run(p.answer("x", "What was Q3 revenue?", None, [], 60))
     assert v.canned and "CANNED" in v.reasoning
     assert a.canned and "CANNED" in a.spoken and "CANNED" in a.chat_line
-    assert "CANNED" in empty.spoken and "couldn't find" in empty.spoken
+    assert "CANNED" in empty.spoken and empty.spoken.startswith("CANNED ANSWER: That's not in your documents, but generally")
 
 
 # ---------------- review B item 1: moving jobs to Gemini from Settings ----------------

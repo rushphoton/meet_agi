@@ -388,7 +388,7 @@ def test_question_that_comes_too_late_is_not_taken_as_the_question(tmp_path):
     async def go():
         h = Harness(tmp_path, Scripted())
         await h.say("Tom Walsh", "Hey AGI.", at=100)
-        await h.say("Tom Walsh", "Anyway, moving on to churn.", at=130)   # 30 s later (> 8 s)
+        await h.say("Tom Walsh", "Anyway, moving on to churn.", at=130)   # 30 s later (> 15 s), not a question
         await h.settle()
         [answer] = h.record.answers
         assert answer.text == "Sorry, I didn't catch a question." and h.provider.calls["answer"] == 0
@@ -423,5 +423,5 @@ def test_spoken_answer_is_held_to_the_word_limit(tmp_path):
         h = Harness(tmp_path, Scripted(answer_text="word " * 200))
         await h.say("Tom Walsh", QUESTION)
         await h.settle()
-        assert len(h.record.answers[0].text.split()) <= 60
+        assert len(h.record.answers[0].text.split()) <= h.settings.answer_max_words == 120
     run(go())
