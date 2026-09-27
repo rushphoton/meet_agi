@@ -212,6 +212,7 @@ Format: `lane · assumption · why · how to undo`.
 
 - Nothing has run on Windows. The first `python scripts/verify.py` there builds `.venv` and needs internet for pip.
 - Nothing has joined a real Google Meet yet. The Attendee and Recall payloads are synthesized from docs and code. One live read-only call was made: Attendee "list bots" → HTTP 200.
+- 27 Sep: Ray's first `go.py` run on Windows got the venv, backend and Attendee key check OK, then failed at the tunnel: ERR_NGROK_334 (an old ngrok still held the address). Fixed: go.py now reuses that tunnel if it already reaches this backend; otherwise it stops old ngrok processes on the laptop and retries once, and if the address is held elsewhere it points to https://dashboard.ngrok.com/endpoints (test named after the symptom).
 - `scripts/go.py` was tested on Linux without the tunnel only. The ngrok step and the Windows process handling are untested.
 - Claude has not produced any output yet (no credit). This is no longer blocking, since Gemini runs every job.
 - Gemini free-tier rate limits are unknown; they are shown only in AI Studio. A lively meeting makes about 10 checks a minute. If the limit is lower, alerts get skipped and the dashboard shows a red warning.

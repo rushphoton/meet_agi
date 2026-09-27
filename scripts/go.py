@@ -122,32 +122,54 @@ def run_backend(offline: bool) -> None:
     say(True, "Backend running" + (" (OFFLINE: canned AI)" if health["offline"] else " (real AI models)"))
 
 
+def _tunnel_reaches_backend(public_url: str) -> bool:
+    # The tunnel guard answers every non-webhook path from outside with our own JSON 404, so seeing it
+    # proves the request went internet -> ngrok -> this backend.
+    try:
+        r = httpx.get(public_url + "/api/health", timeout=5, headers={"ngrok-skip-browser-warning": "1"})
+    except httpx.HTTPError:
+        return False
+    return r.status_code == 404 and r.headers.get("content-type", "").startswith("application/json")
+
+
+def _stop_old_ngrok_on_this_laptop() -> None:
+    """ERR_NGROK_334 (seen 27 Sep 2026): an ngrok left running from earlier holds the address."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/IM", "ngrok.exe", "/F"], capture_output=True)
+    else:
+        subprocess.run(["pkill", "-x", "ngrok"], capture_output=True)
+    time.sleep(3)  # ngrok's servers take a moment to release the address
+
+
 def run_tunnel(public_url: str) -> None:
     exe = ROOT / "tools" / ("ngrok.exe" if os.name == "nt" else "ngrok")
     ngrok = str(exe) if exe.exists() else shutil.which("ngrok")
     if not ngrok:
         fail("ngrok was not found (expected tools\\ngrok.exe).", "Tell Claude 'ngrok missing'.")
-    say(None, f"Starting the public tunnel {public_url} ...")
-    p, log = start("tunnel", [ngrok, "http", "8000", f"--url={public_url}", "--log=stdout"])
-
-    def reaches_backend() -> bool:
-        # The tunnel guard answers every non-webhook path from outside with our own JSON 404, so seeing it
-        # proves the request went internet -> ngrok -> this backend.
-        r = httpx.get(public_url + "/api/health", timeout=5, headers={"ngrok-skip-browser-warning": "1"})
-        return r.status_code == 404 and r.headers.get("content-type", "").startswith("application/json")
-
-    if not wait_until(reaches_backend, p, 40):
+    for attempt in (1, 2):
+        say(None, f"Starting the public tunnel {public_url} ...")
+        p, log = start("tunnel", [ngrok, "http", "8000", f"--url={public_url}", "--log=stdout"])
+        if wait_until(lambda: _tunnel_reaches_backend(public_url), p, 40):
+            say(True, "Public tunnel works (only the meeting webhook is let through; everything else is blocked)")
+            return
         text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
         if "authtoken" in text.lower() or "ERR_NGROK_4018" in text:
             fail("ngrok is not logged in on this laptop.",
                  "Open https://dashboard.ngrok.com/get-started/your-authtoken, copy the token, then run: "
                  "tools\\ngrok.exe config add-authtoken PASTE_TOKEN_HERE   and run this script again.", log)
         if "ERR_NGROK_334" in text or "already online" in text:
-            fail("The tunnel address is already in use by another ngrok window.",
-                 "Close the other ngrok window, then run this again.", log)
+            if _tunnel_reaches_backend(public_url):
+                say(True, "Public tunnel already running from an earlier ngrok on this laptop - using it")
+                return
+            if attempt == 1:
+                say(None, "An old ngrok is holding the tunnel address - stopping it and retrying ...")
+                _stop_old_ngrok_on_this_laptop()
+                continue
+            fail("The tunnel address is held by an ngrok running somewhere else (another computer or window).",
+                 "Open https://dashboard.ngrok.com/endpoints , find among-sanction-browsing.ngrok-free.dev, "
+                 "stop it (or shut the other computer's ngrok), then run this again.", log)
         fail("The public tunnel did not reach the backend.",
              "Check the VPN/internet, then copy the lines above into the Claude chat.", log)
-    say(True, "Public tunnel works (only the meeting webhook is let through; everything else is blocked)")
 
 
 def run_dashboard() -> None:
