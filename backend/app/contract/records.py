@@ -101,6 +101,8 @@ class GateSettings(_Model):
 class WakeSettings(_Model):
     variants: list[str] = [
         "hey agi", "hey a g i", "hey aji", "hey age i", "hey a gi", "hey ag i", "hi agi", "hey agee",
+        # Seen in the first live Meet test (27 Sep 2026): Meet's captions wrote "Hey GI!" and "Hey, GI, ...".
+        "hey gi", "hey g i",
     ]
     max_word_position: int = 3
     question_wait_seconds: int = 8
