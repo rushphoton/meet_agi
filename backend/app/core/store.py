@@ -1,8 +1,11 @@
 """
 WHY THIS EXISTS
 Keeps every meeting in memory and writes one JSON file per meeting to
-data/meetings/{meeting_id}.json after every event (write to a temp file, then
-rename, so a crash never leaves a half-written file). On startup it reloads
+data/meetings/{meeting_id}.json (write to a temp file, then rename, so a crash
+never leaves a half-written file). Saves are batched to at most one every
+SAVE_EVERY_SECONDS while a meeting runs; the meeting's end and its summary are
+written at once. Gate v0.1, item 9: rewriting the whole file on every event
+took ~30 ms per event after 1,500 events and blocked the live path. On startup it reloads
 those files, so the review screen survives a restart.
 
 FAILURE IT PREVENTS
@@ -14,6 +17,7 @@ across; not before (DESIGN.md §9).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -31,6 +35,8 @@ _events_adapter = TypeAdapter(list[Event])
 log = logging.getLogger("meet_agi.store")
 SAVE_ATTEMPTS = 5          # review B item 9: Windows Defender/OneDrive can hold the file for a moment
 SAVE_RETRY_SECONDS = 0.05
+SAVE_EVERY_SECONDS = 1.0   # at most one whole-file write per meeting per second; a crash loses <= 1 s
+_SAVE_AT_ONCE = {"meeting.ended", "meeting.summary"}
 
 
 class Store:
@@ -39,6 +45,8 @@ class Store:
         self.dir.mkdir(parents=True, exist_ok=True)
         self._records: dict[str, MeetingRecord] = {}
         self._events: dict[str, list] = {}
+        self._last_save: dict[str, float] = {}
+        self._pending: dict[str, asyncio.TimerHandle] = {}
         self._load()
 
     # ---------- reading ----------
@@ -123,12 +131,27 @@ class Store:
             r.ended_at = r.ended_at or event.at
         r.events_last_seq = event.seq
         self._events[event.meeting_id].append(event)
+        mid = event.meeting_id
+        wait = self._last_save.get(mid, 0.0) + SAVE_EVERY_SECONDS - time.monotonic()
+        if t in _SAVE_AT_ONCE or wait <= 0:
+            self._flush(mid)
+        elif mid not in self._pending:
+            try:
+                self._pending[mid] = asyncio.get_running_loop().call_later(wait, self._flush, mid)
+            except RuntimeError:     # no event loop (plain scripts): write now
+                self._flush(mid)
+
+    def _flush(self, meeting_id: str) -> None:
+        handle = self._pending.pop(meeting_id, None)
+        if handle is not None:
+            handle.cancel()
+        self._last_save[meeting_id] = time.monotonic()
         try:
-            self._save(event.meeting_id)
+            self._save(meeting_id)
         except OSError:
             # The in-memory record is already updated and the live path (chat, voice, summary)
-            # must keep going; the next event's save writes the whole file again.
-            log.exception("Could not save meeting %s to disk; will retry on the next event", event.meeting_id)
+            # must keep going; the next save writes the whole file again.
+            log.exception("Could not save meeting %s to disk; will retry on the next event", meeting_id)
 
     # ---------- disk ----------
     def path_for(self, meeting_id: str) -> Path:

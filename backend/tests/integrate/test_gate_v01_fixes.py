@@ -244,3 +244,34 @@ def test_stop_talking_let_the_next_sentence_play_because_it_was_already_queued_a
     # each clip before the next one is sent (it was 0.25 s).
     from backend.app.speech import audio_out
     assert audio_out.PLAYBACK_MARGIN_SECONDS >= 0.5
+
+
+# ---- item 9: every event rewrote the whole meeting file, slowing a long meeting -------------------
+def test_long_meeting_rewrote_the_whole_file_on_every_event_and_lagged(tmp_path, monkeypatch):
+    import json as _json
+    import time as _time
+
+    from backend.app.contract.events import MeetingEnded, TranscriptSegment
+    from backend.app.core import store as store_mod
+    from backend.app.core.bus import EventBus
+    from backend.app.core.store import Store
+
+    async def go():
+        s = Store(tmp_path)
+        bus = EventBus(s)
+        mid = s.create_meeting("t", "recall").meeting_id
+        saves = []
+        real_save = s._save
+        monkeypatch.setattr(s, "_save", lambda m: (saves.append(m), real_save(m)))
+        for i in range(50):
+            await bus.publish(mid, "transcript.segment", TranscriptSegment(
+                segment_id=f"s{i}", speaker_id="a", speaker_name="A", text="words", t_start=i, t_end=i + 1,
+                source="recall"))
+        assert len(saves) <= 2                              # not 50 whole-file rewrites
+        await asyncio.sleep(store_mod.SAVE_EVERY_SECONDS + 0.3)
+        on_disk = _json.loads(s.path_for(mid).read_text(encoding="utf-8"))
+        assert len(on_disk["record"]["segments"]) == 50      # nothing lost, just batched
+        await bus.publish(mid, "meeting.ended", MeetingEnded(reason="call_ended"))
+        on_disk = _json.loads(s.path_for(mid).read_text(encoding="utf-8"))
+        assert on_disk["record"]["ended_at"] is not None     # the end is written at once
+    asyncio.run(go())
