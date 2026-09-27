@@ -51,7 +51,10 @@ from .fillers import FillerBank
 from .sentences import split_sentences
 
 log = logging.getLogger("meet_agi.audio")
-PLAYBACK_MARGIN_SECONDS = 0.25   # small gap so Recall has finished one clip before the next arrives
+# 0.6 s (was 0.25; gate v0.1, item 7): Attendee queues clips on its own servers and cannot cut one, so a
+# clip sent before the previous one finished there is already out of reach when "stop talking" arrives.
+# 0.6 s reads as a natural pause between sentences; a rehearsal decides whether it can come down.
+PLAYBACK_MARGIN_SECONDS = 0.6
 INITIAL_STATUS = "queued"
 
 

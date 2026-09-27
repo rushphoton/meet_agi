@@ -236,3 +236,11 @@ def test_hey_agi_long_after_the_last_answer_publishes_no_stop(tmp_path):
         await h.settle()
         assert h.events("stop") == []
     run(go())
+
+
+# ---- item 7: after "stop talking" the next sentence still played (already queued at Attendee) ------
+def test_stop_talking_let_the_next_sentence_play_because_it_was_already_queued_at_attendee():
+    # Only a rehearsal proves the right number; this pins the margin that leaves Attendee 0.6 s to start
+    # each clip before the next one is sent (it was 0.25 s).
+    from backend.app.speech import audio_out
+    assert audio_out.PLAYBACK_MARGIN_SECONDS >= 0.5
