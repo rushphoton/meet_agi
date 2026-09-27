@@ -44,25 +44,38 @@ def test_transcription_variants_of_hey_agi_fire(sentence, variant, question):
 
 
 def test_wake_variants_come_from_settings():
-    assert detect_wake("Hey edgy, what was revenue?", WAKE) is None
-    assert detect_wake("Hey edgy, what was revenue?", WAKE + ["hey edgy"]).question == "what was revenue?"
+    assert detect_wake("Hey zork, what was revenue?", WAKE) is None
+    assert detect_wake("Hey zork, what was revenue?", WAKE + ["hey zork"]).question == "what was revenue?"
 
 
 @pytest.mark.parametrize("sentence", ["Stop the recording please.", "AGI stopped working yesterday.",
-                                      "We should stop talking about AGI.", "Let's talk about AGI."])
+                                      "Let's talk about AGI.", "Fair enough, my mistake on the direction.",
+                                      "We can't stop now, the quarter is almost done.", "Hold on to the numbers.",
+                                      "That was enough revenue for the quarter."])
 def test_sentences_that_merely_contain_stop_or_agi_are_not_stop_commands(sentence):
+    """Bare stop words ("stop", "enough", "hold on") only count as the sentence or its opening.
+    Found in the replay of 27 Sep: "Fair enough, my mistake" stopped the bot."""
     assert detect_stop(sentence, S.stop_variants) is None
 
 
 @pytest.mark.parametrize("sentence", ["AGI, stop talking.", "Okay AGI stop.", "Stop talking, AGI!",
-                                      "a g i stop talking", "Aji, stop talking please."])
+                                      "a g i stop talking", "Aji, stop talking please.",
+                                      # Ray, 27 Sep: no "AGI" needed, anyone in the room
+                                      "Stop talking.", "Okay, you can stop talking now.", "Be quiet please.",
+                                      "We should stop talking about AGI."])
 def test_stop_phrase_variants_are_recognised_anywhere_in_the_sentence(sentence):
     assert detect_stop(sentence, S.stop_variants) is not None
 
 
+@pytest.mark.parametrize("sentence", ["Stop.", "Okay stop.", "Stop, thanks", "Enough!", "Hold on, let me check.",
+                                      "That's enough.", "Please stop now.", "OK stop", "Wait, wait."])
+def test_bare_stop_words_count_when_they_are_the_sentence_or_open_it(sentence):
+    assert detect_stop(sentence, S.stop_variants) is not None
+
+
 # ---------------- review B item 7: find the wake spellings rehearsal actually produces ----------------
-@pytest.mark.parametrize("sentence", ["Hey Aggie, what was Q3 revenue?", "Okay hey AJ what's churn",
-                                      "Hi Ajay.", "So hey AI, tell me the margin"])
+@pytest.mark.parametrize("sentence", ["Hey Aggie, what was Q3 revenue?", "Okay hey AJee what's churn",
+                                      "Hi Ajit.", "So hey AI, tell me the margin"])
 def test_mistranscribed_wake_phrase_is_recognised_as_a_likely_miss(sentence):
     assert detect_wake(sentence, WAKE) is None
     assert looks_like_wake_attempt(sentence)

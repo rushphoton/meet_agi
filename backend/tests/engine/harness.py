@@ -24,7 +24,7 @@ from backend.app.core.store import Store
 from backend.app.knowledge import KnowledgeBase
 from backend.app.pipeline.engine import Engine
 from backend.app.providers.llm.base import (
-    AnswerDraft, CheapCheck, LLMError, SummaryDraft, Verdict,
+    AnswerDraft, CheapCheck, LLMError, SummaryDraft, Verdict, WakeCheck,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -43,6 +43,12 @@ class Scripted:
     cheap_delay: float = 0.0
     new_lines_seen: list = field(default_factory=list)
     summary_error: Exception | None = None
+    # wake check for sentences that only SOUND like "Hey AGI": a bool (addressed?), a WakeCheck,
+    # or an Exception to raise; wake_delay makes it slow.
+    wake: object = False
+    wake_delay: float = 0.0
+    wake_calls: list = field(default_factory=list)
+    answer_context: list = field(default_factory=list)
     calls: dict = field(default_factory=lambda: {"cheap": 0, "judge": 0, "answer": 0, "summary": 0})
     name: str = "scripted"
     canned: bool = False
@@ -58,6 +64,16 @@ class Scripted:
             return CheapCheck(False, 0.0, "", "cheap-model")
         return self.cheap(lines, new_lines)
 
+    async def confirm_wake(self, model, text, heard, lines):
+        self.wake_calls.append((model, text, heard))
+        if self.wake_delay:
+            await asyncio.sleep(self.wake_delay)
+        if isinstance(self.wake, Exception):
+            raise self.wake
+        if isinstance(self.wake, WakeCheck):
+            return self.wake
+        return WakeCheck(addressed=bool(self.wake), question=None, model="cheap-model")
+
     async def judge(self, model, lines, passages, already_flagged, new_lines=1):
         self.calls["judge"] += 1
         if self.judge_delay:
@@ -68,8 +84,9 @@ class Scripted:
             return Verdict(is_issue=False, model="judge-model")
         return self.verdict(lines, new_lines)
 
-    async def answer(self, model, question, asked_by, passages, max_words):
+    async def answer(self, model, question, asked_by, passages, max_words, context=None):
         self.calls["answer"] += 1
+        self.answer_context.append(context)
         if self.answer_delay:
             await asyncio.sleep(self.answer_delay)
         if self.answer_error:

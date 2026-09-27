@@ -1,8 +1,9 @@
 """
 WHY THIS EXISTS
-Names the four jobs the engine asks an AI model to do - the cheap "is this
-worth a closer look?" check, the careful dispute judgement, the spoken
-answer, and the end-of-meeting summary - and the shape of each result. The
+Names the five jobs the engine asks an AI model to do - the cheap "is this
+worth a closer look?" check, the cheap "is this person talking to the
+assistant?" wake check, the careful dispute judgement, the spoken answer, and
+the end-of-meeting summary - and the shape of each result. The
 real providers (Gemini, Claude) and the canned test provider all do these
 same four jobs, so the pipeline never knows or cares which one it is using.
 
@@ -32,6 +33,16 @@ class CheapCheck:
     worth_a_look: bool
     score: float
     topic: str
+    model: str
+    canned: bool = False
+
+
+@dataclass
+class WakeCheck:
+    """The cheap model's answer to "is the speaker addressing the AI assistant?" for a sentence
+    that only sounded like "Hey AGI" ("Hey Aggie, ...")."""
+    addressed: bool
+    question: str | None
     model: str
     canned: bool = False
 
@@ -86,14 +97,22 @@ class LLMProvider(Protocol):
     async def cheap_check(self, model: str, lines: list[TranscriptSegment], passages: list[Passage],
                           already_flagged: list[str], new_lines: int = 1) -> CheapCheck: ...
 
+    # text: the sentence that sounded like "Hey AGI"; heard: the AGI-like word(s) in it;
+    # lines: recent transcript for context.
+    async def confirm_wake(self, model: str, text: str, heard: str,
+                           lines: list[TranscriptSegment]) -> WakeCheck: ...
+
     async def judge(self, model: str, lines: list[TranscriptSegment], passages: list[Passage],
                     already_flagged: list[str], new_lines: int = 1) -> Verdict: ...
 
+    # context: the last few transcript lines, so "what about that number?" makes sense.
     async def answer(self, model: str, question: str, asked_by: str | None, passages: list[Passage],
-                     max_words: int) -> AnswerDraft: ...
+                     max_words: int, context: list[TranscriptSegment] | None = None) -> AnswerDraft: ...
 
     async def summarize(self, model: str, segments: list[TranscriptSegment],
                         alerts: list[Alert]) -> SummaryDraft: ...
 
 
-NOT_FOUND = "I couldn't find that in our documents."
+# When the documents are silent the bot answers from general knowledge and says so FIRST (Ray,
+# 27 Sep 2026; replaces DESIGN §8 decision 9's "I couldn't find that in our documents").
+NOT_IN_DOCS = "That's not in your documents, but generally"

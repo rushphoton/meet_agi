@@ -1,14 +1,21 @@
 """
 WHY THIS EXISTS
 The "thinker". After every finished sentence it decides, in this order:
-1. Is someone saying "AGI, stop talking" while the bot is speaking?
-   -> publish `stop` and drop any answer still being prepared.
+1. Is anyone saying "stop talking" (or "AGI, stop", "Stop.", "Enough.")
+   while the bot is preparing, queuing or playing an answer, or within 5 s
+   after? -> publish `stop` and drop any answer still being prepared.
 2. Is someone saying "Hey AGI" (or pressing the wake button)?
-   -> publish `wake` at once (so the filler line can play), take the question
-   (the rest of the sentence, or the same person's next sentence within
-   8 seconds), look it up in the documents, have Claude answer in at most 60
-   words, and publish `spoken.answer` plus a chat line "Because you asked: ...".
-3. Otherwise: is there a factual dispute or doubt, whoever is speaking?
+   -> exact spellings (Settings) wake at once; a sentence that only SOUNDS
+   like it ("Hey Aggie, ...") is first confirmed by one cheap-model call.
+   Then publish `wake` (so the filler line can play), take the question (the
+   rest of the sentence, or the same person's next sentence within
+   wake.question_wait_seconds - 15 s), look it up in the documents, answer
+   in 2-5 complete sentences of at most answer_max_words (120) words, and
+   publish `spoken.answer` plus a chat line "Because you asked: ...". If the
+   bot had to say "Sorry, I didn't catch a question", a clear question from
+   the same person in the next 20 s is still answered.
+3. Otherwise: is there a factual dispute, doubt or self-correction, whoever
+   is speaking (one person contradicting themselves counts)?
    -> Gemini Flash-Lite takes a quick look at every sentence; only when it
    sees something does Claude judge it; the gate (gate.py) decides whether
    the room hears about it. Publishes `alert` (full reasoning, for the
@@ -43,7 +50,9 @@ from ..knowledge import KnowledgeBase, Passage
 from ..knowledge.index import tokenize
 from ..providers.llm.base import AnswerDraft, LLMError, LLMProvider
 from .gate import check_gate
-from .phrases import detect_stop, detect_wake, looks_like_wake_attempt
+from .phrases import (
+    WakeCandidate, detect_stop, detect_wake, fuzzy_wake_candidate, looks_like_question, looks_like_wake_attempt,
+)
 
 log = logging.getLogger("meet_agi.engine")
 
@@ -54,6 +63,8 @@ STOP_GRACE_SECONDS = 5       # "AGI, stop" still counts up to 5 s after an answe
 QUEUED_ANSWER_MAX_SECONDS = 120  # an answer nobody marked "played" stops counting as speaking after this
 END_DRAIN_SECONDS = 30       # how long the summary waits for checks still running
 MAX_WAITING = 2              # more sentences than this waiting for a dispute check: skip to the newest
+MISSED_FOLLOW_UP_SECONDS = 20  # after "didn't catch a question", a clear re-ask this soon is answered
+WAKE_CHECK_SECONDS = 8.0     # the cheap model's "is this person talking to the assistant?" call
 NO_QUESTION = "Sorry, I didn't catch a question."
 ANSWER_FAILED = "Sorry, I couldn't look that up just now."
 
@@ -69,12 +80,31 @@ class _Pending:
 
 
 @dataclass
+class _Confirming:
+    """A sentence that only sounded like "Hey AGI", waiting for the cheap model's yes/no. The
+    same speaker's next sentences wait with it (one of them may be the question)."""
+    segment: TranscriptSegment
+    candidate: WakeCandidate
+    buffered: list = field(default_factory=list)
+
+
+@dataclass
+class _Missed:
+    """The bot said "didn't catch a question": the asker may still re-ask without "Hey AGI"."""
+    speaker_id: str
+    speaker_name: str | None
+    until_t: float              # meeting time
+
+
+@dataclass
 class _MeetingState:
     recent: deque = field(default_factory=lambda: deque(maxlen=CONTEXT_LINES))
     detect_queue: asyncio.Queue | None = None
     detect_worker: asyncio.Task | None = None
     detect_in_progress: int = 0              # sentences queued or being checked
     pending: _Pending | None = None
+    confirming: _Confirming | None = None
+    missed: _Missed | None = None
     answer_task: asyncio.Task | None = None
     last_answer_at: float | None = None      # time.monotonic() of the last spoken.answer event
     last_answer_status: str | None = None
@@ -94,8 +124,16 @@ def _truncate(text: str, limit: int) -> str:
 
 
 def _limit_words(text: str, max_words: int) -> str:
+    """Hold an answer to max_words, cutting after the last COMPLETE sentence that fits (so the room
+    never hears half a sentence). Only when not even one sentence fits is it cut at a word."""
     words = text.split()
-    return text if len(words) <= max_words else " ".join(words[:max_words]).rstrip(",;:") + "…"
+    if len(words) <= max_words:
+        return text
+    cut = " ".join(words[:max_words])
+    ends = [i for i, ch in enumerate(cut) if ch in ".!?" and (i + 1 == len(cut) or cut[i + 1] == " ")]
+    if ends:
+        return cut[: ends[-1] + 1]
+    return cut.rstrip(",;:") + "…"
 
 
 def _evidence(passages: list[Passage], indexes: list[int]) -> list[Evidence]:
@@ -104,8 +142,10 @@ def _evidence(passages: list[Passage], indexes: list[int]) -> list[Evidence]:
 
 
 _CONSEQUENCE = {"cheap_check": "alerts are off", "judge": "alerts are off",
-                "answer": "spoken answers are off", "summary": "no summary"}
-_JOB_NAME = {"cheap_check": "check", "judge": "judge", "answer": "answers", "summary": "summary"}
+                "answer": "spoken answers are off", "summary": "no summary",
+                "wake_check": "only clear Hey AGI wakes"}
+_JOB_NAME = {"cheap_check": "check", "judge": "judge", "answer": "answers", "summary": "summary",
+             "wake_check": "wake check"}
 
 
 def vendor_warning(job: str, model: str, exc: Exception) -> str:
@@ -139,10 +179,15 @@ class Engine:
         st = self._state(ctx.meeting_id)
         s = ctx.settings
 
-        # 1. "AGI, stop talking" - only counts while the bot is (about to be) speaking.
+        # 1. "Stop talking" (anyone, with or without "AGI") - only while the bot is (about to be) speaking.
         if detect_stop(segment.text, s.stop_variants) and self._speaking(st):
             self._cancel_speech(st)
             await ctx.bus.publish(ctx.meeting_id, "stop", Stop(trigger="phrase", segment_id=segment.segment_id))
+            return
+
+        # 1b. The same speaker keeps talking while we check whether they said "Hey AGI": hold it.
+        if st.confirming is not None and st.confirming.segment.speaker_id == segment.speaker_id:
+            st.confirming.buffered.append(segment)
             return
 
         # 2. "Hey AGI ..." at the start of a sentence.
@@ -151,34 +196,102 @@ class Engine:
             # Rehearsal aid (review B item 7): find the spellings to add to Settings > wake variants.
             log.info("Possible missed wake phrase (not in wake.variants): %r", segment.text)
         if wake:
-            self._cancel_speech(st)  # a new wake supersedes an older, unanswered one
-            st.recent.append(segment)
-            await ctx.bus.publish(ctx.meeting_id, "wake", Wake(
-                trigger="phrase", segment_id=segment.segment_id, matched_variant=wake.variant,
-                question=wake.question))
-            if wake.question:
-                self._start_answer(ctx, st, wake.question, segment.speaker_name)
-            else:
-                self._start_waiting(ctx, st, _Pending("phrase", segment.speaker_id, segment.speaker_name,
-                                                      segment.t_end))
+            await self._wake(ctx, st, segment, wake.variant, wake.question)
+            return
+        candidate = None if wake else fuzzy_wake_candidate(segment.text, s.wake.max_word_position)
+        if candidate is not None and st.confirming is None:
+            # Sounds like "Hey AGI" but isn't an exact spelling: one cheap-model call decides.
+            st.confirming = _Confirming(segment, candidate)
+            self._spawn(st, self._confirm_wake(ctx, st, st.confirming))
             return
 
         # 3. The question after a bare "Hey AGI" (or after the wake button).
         pending = st.pending
         if pending is not None:
-            late = pending.wake_t_end is not None and segment.t_start - pending.wake_t_end > s.wake.question_wait_seconds
-            if late:
+            wait = s.wake.question_wait_seconds
+            since = None if pending.wake_t_end is None else segment.t_start - pending.wake_t_end
+            same = pending.speaker_id is None or pending.speaker_id == segment.speaker_id
+            if since is not None and since > wait:
                 self._clear_pending(st)
+                if same and since <= wait + MISSED_FOLLOW_UP_SECONDS and looks_like_question(segment.text):
+                    st.recent.append(segment)   # a late but clear question: answer it, no "sorry"
+                    self._start_answer(ctx, st, segment.text, segment.speaker_name)
+                    return
                 self._start_fixed_answer(ctx, st, NO_QUESTION, pending.speaker_name)
-            elif pending.speaker_id is None or pending.speaker_id == segment.speaker_id:
+                self._remember_missed(st, pending, wait)
+            elif same:
                 self._clear_pending(st)
                 st.recent.append(segment)
+                self._start_answer(ctx, st, segment.text, segment.speaker_name)
+                return
+
+        # 3b. Re-asked after "Sorry, I didn't catch a question" (Ray re-asked without "Hey AGI").
+        missed = st.missed
+        if missed is not None:
+            if segment.t_start > missed.until_t:
+                st.missed = None
+            elif segment.speaker_id == missed.speaker_id and looks_like_question(segment.text):
+                st.missed = None
+                st.recent.append(segment)
+                self._cancel_speech(st)
                 self._start_answer(ctx, st, segment.text, segment.speaker_name)
                 return
 
         # 4. Everything else: is there a factual dispute or doubt? (any speaker)
         st.recent.append(segment)
         self._enqueue_detection(ctx, st, list(st.recent))
+
+    async def _wake(self, ctx: MeetingContext, st: _MeetingState, segment: TranscriptSegment, variant: str,
+                    question: str | None) -> None:
+        self._cancel_speech(st)  # a new wake supersedes an older, unanswered one
+        st.missed = None
+        if st.confirming is not None and st.confirming.segment is not segment:
+            st.confirming = None     # someone else's exact "Hey AGI" beat the check; drop that check
+        st.recent.append(segment)
+        await ctx.bus.publish(ctx.meeting_id, "wake", Wake(
+            trigger="phrase", segment_id=segment.segment_id, matched_variant=variant, question=question))
+        if question:
+            self._start_answer(ctx, st, question, segment.speaker_name)
+        else:
+            self._start_waiting(ctx, st, _Pending("phrase", segment.speaker_id, segment.speaker_name,
+                                                  segment.t_end))
+
+    async def _confirm_wake(self, ctx: MeetingContext, st: _MeetingState, conf: _Confirming) -> None:
+        """Ask the cheap model whether a "sounds like Hey AGI" sentence was addressed to the bot.
+        If the call fails or takes over 8 s, wake only for the strong spellings ("GI", "giant")."""
+        s, seg, cand = ctx.settings, conf.segment, conf.candidate
+        model = s.models.cheap_check
+        question = cand.question
+        try:
+            check = getattr(self.provider, "confirm_wake", None)
+            if check is None:
+                raise LLMError("this AI provider has no wake check")
+            try:
+                result = await asyncio.wait_for(check(model, seg.text, cand.token, list(st.recent)),
+                                                WAKE_CHECK_SECONDS)
+            except asyncio.TimeoutError as exc:
+                raise LLMError(f"timed out after {WAKE_CHECK_SECONDS:.0f} s") from exc
+            self._vendor_ok("wake_check")
+            addressed = result.addressed
+            question = result.question or cand.question
+            how = "confirmed"
+        except LLMError as exc:
+            log.warning("Wake check failed (%s); %s", exc,
+                        "waking anyway (strong spelling)" if cand.strong else "not waking")
+            self._vendor_failed("wake_check", model, exc)
+            addressed, how = cand.strong, "check failed, strong spelling"
+        superseded = st.confirming is not conf
+        if not superseded:
+            st.confirming = None
+            if addressed:
+                log.info("Sounds-like wake %r %s", cand.variant, how)
+                await self._wake(ctx, st, seg, f"{cand.variant} (sounds like hey agi; {how})", question)
+            else:
+                log.info("Sounds-like wake %r: not addressed to the assistant", cand.variant)
+                st.recent.append(seg)
+                self._enqueue_detection(ctx, st, list(st.recent))
+        for later in conf.buffered:
+            await self.on_segment(later, ctx)
 
     # ================= bus events (subscribed in register.py) =================
     async def on_wake_button(self, question: str | None, ctx: MeetingContext) -> None:
@@ -253,11 +366,18 @@ class Engine:
             if st.pending is pending:
                 st.pending = None
                 self._start_fixed_answer(ctx, st, NO_QUESTION, pending.speaker_name)
+                self._remember_missed(st, pending, wait)
 
         pending.timer = self._spawn(st, give_up())
 
+    @staticmethod
+    def _remember_missed(st: _MeetingState, pending: _Pending, wait: int) -> None:
+        if pending.speaker_id is not None and pending.wake_t_end is not None:
+            st.missed = _Missed(pending.speaker_id, pending.speaker_name,
+                                pending.wake_t_end + wait + MISSED_FOLLOW_UP_SECONDS)
+
     def _start_answer(self, ctx: MeetingContext, st: _MeetingState, question: str, asked_by: str | None) -> None:
-        st.answer_task = self._spawn(st, self._answer(ctx, question, asked_by))
+        st.answer_task = self._spawn(st, self._answer(ctx, question, asked_by, list(st.recent)))
 
     def _start_fixed_answer(self, ctx: MeetingContext, st: _MeetingState, text: str, asked_by: str | None) -> None:
         st.answer_task = self._spawn(st, self._publish_answer(
@@ -265,11 +385,13 @@ class Engine:
             draft=AnswerDraft(spoken=text, chat_line="", passage_indexes=[], model="none"),
             passages=[], post_chat=False))
 
-    async def _answer(self, ctx: MeetingContext, question: str, asked_by: str | None) -> None:
+    async def _answer(self, ctx: MeetingContext, question: str, asked_by: str | None,
+                      context: list[TranscriptSegment]) -> None:
         s = ctx.settings
         passages = self.knowledge.search(question, ANSWER_PASSAGES)
         try:
-            draft = await self.provider.answer(s.models.answer, question, asked_by, passages, s.answer_max_words)
+            draft = await self.provider.answer(s.models.answer, question, asked_by, passages, s.answer_max_words,
+                                               context=context)
             self._vendor_ok("answer")
         except LLMError as exc:
             log.warning("Answer model failed (%s); saying so instead", exc)
