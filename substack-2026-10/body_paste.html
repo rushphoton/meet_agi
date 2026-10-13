@@ -1,0 +1,107 @@
+<p><img src="https://raw.githubusercontent.com/rushphoton/meet_agi/article-assets/substack-2026-10/image-1.png"></p>
+<p><em>Same product, built twice. Counts from the two repositories’ own git history and test runners. The hackathon build was tested live during the day; none of it was recorded.</em></p>
+<p><strong>The hackathon build.</strong> On August 1, at AGI House’s Voice Agent Build Day, Phillip Hwang and I built Meet AGI: a participant that sits in your Google Meet, flags shaky numbers in the chat, and answers out loud when someone says “Hey AGI.” Phillip built the hard parts. I built the dashboard. We took second in the main track and first in the inference track, and I <a href="https://raywanh.substack.com/p/a-cfo-walks-into-a-hackathon">wrote about the trip that put me in that room</a>.</p>
+<p>What I didn’t say then is that I couldn’t have rebuilt it. I had the repository, the demo video, and a podium photo. I did not have the thing itself in my head.</p>
+<p><strong>The personal rebuild.</strong> So in late September I rebuilt it from a blank folder. Different vendors, a different process, and two constraints I set for myself and kept. I would not read the code. And I would not write the instructions the builders worked from either — I would describe what I wanted once, in plain words, and have an AI session write everything the building sessions would read. Every piece of work had to end in something I could check without reading — one command that exits clean, or a screen I could open. Three sessions and four days later it was in a real meeting, and the captions were calling it “Giant.”</p>
+<p><strong><em>A proper disclaimer, because it matters: this is a personal project, built in personal time, on personal accounts, on a sample document I wrote for the purpose. No company systems, data, documents or meetings were connected to any of it; the “board deck” the bot quotes is a one-page fake with invented numbers. Nothing here describes my employer’s processes. Counts and timings are real and come from the project’s own logs. Views are my own and not those of any company or employer. Nothing here is an endorsement of any product.</em></strong></p>
+<h2 id="what-the-thing-does-both-builds">What the thing does (both builds)</h2>
+<p>Meet AGI joins a Google Meet as a guest. The host admits it, it posts one line in the chat saying it is listening, and then it stays silent. It reads along with your documents. It speaks up in exactly two ways:</p>
+<ol type="1">
+<li><strong>Silently, in the chat.</strong> When the room disagrees about a fact, someone contradicts themselves, or someone is unsure of a number the documents settle, it posts a short flag — <em>Because you mentioned Q3 revenue was rising: the board deck says it fell 4%</em> — and puts the full reasoning, with the quote and the source passage, on a dashboard.</li>
+<li><strong>Out loud, on request.</strong> Say “Hey AGI, what was Q3 revenue according to the board deck?” and it says a filler line so the room knows it heard, then answers in a few sentences from the documents. “Stop talking” cuts it off.</li>
+</ol>
+<p>When the call ends it writes a summary and a list of follow-ups. That is the whole product, both times.</p>
+<p><img src="https://raw.githubusercontent.com/rushphoton/meet_agi/article-assets/substack-2026-10/image-2.png"></p>
+<p><em>The hackathon dashboard, August 1: one session page, claims first, sources one click away. Shown here replaying its built-in fixture meeting.</em></p>
+<p><img src="https://raw.githubusercontent.com/rushphoton/meet_agi/article-assets/substack-2026-10/image-3.png"></p>
+<p><em>The rebuild’s live view, replaying the scripted fake meeting offline: the flagged line in the transcript, the alert with its reasoning, the spoken answer, the two chat posts. Everything canned says so.</em></p>
+<h2 id="hackathon-build-vs.-personal-rebuild">Hackathon build vs. personal rebuild</h2>
+<p>The quantitative comparison first, because the numbers carry the argument.</p>
+<ul>
+<li><strong>People</strong> — Hackathon: 2 humans, same table · Rebuild: 1 human (me) + 3 builder agents + 1 reviewer agent</li>
+<li><strong>Wall-clock time</strong> — Hackathon: 1 day · Rebuild: 3 sessions across 4 days</li>
+<li><strong>Code I read</strong> — Hackathon: a little · Rebuild: none</li>
+<li><strong>Commits</strong> — Hackathon: 17 · Rebuild: 61</li>
+<li><strong>Python lines (tests included)</strong> — Hackathon: 14,710 · Rebuild: 11,090</li>
+<li><strong>Automated tests</strong> — Hackathon: 193 · Rebuild: 431 (382 backend + 49 dashboard)</li>
+<li><strong>Test files</strong> — Hackathon: 9 · Rebuild: 31</li>
+<li><strong>Vendor accounts</strong> — Hackathon: 6 (Recall, Inworld, Character.AI, Tenstorrent, Gemini, Claude) · Rebuild: 3 (Attendee, Gemini, Inworld)</li>
+<li><strong>AI models in the loop</strong> — Hackathon: 3 families (Gemini, Claude, Qwen on Tenstorrent) · Rebuild: 1 (Gemini Flash-Lite, every job)</li>
+<li><strong>Design doc before code</strong> — Hackathon: yes, reconciled with the code during the day · Rebuild: yes, frozen before any code; 11 house rules alongside</li>
+<li><strong>Hostile review before demo</strong> — Hackathon: none in the repository · Rebuild: 2 (11 findings, then a 10-item gate)</li>
+<li><strong>Live meetings</strong> — Hackathon: several during the day; nothing recorded · Rebuild: 3, every line and timestamp saved; 1 timed in full</li>
+<li><strong>Prompts I wrote by hand</strong> — Hackathon: the ones for my part · Rebuild: one brief; the rest written by an AI planning session</li>
+<li><strong>Vendor spend</strong> — Hackathon: under US$20 · Rebuild: US$0 on the models so far; voice on credits we won in August</li>
+</ul>
+<p>Fewer lines, more than twice the tests, half the vendors, one model. That is not because the second version does less. It does more: summaries with follow-ups, a settings screen, a one-command launcher, a panic button that pulls every bot out of every call. The difference is where the hours went.</p>
+<p><img src="https://raw.githubusercontent.com/rushphoton/meet_agi/article-assets/substack-2026-10/image-4.png"></p>
+<p><em>The stack, before and after. Shaded rows changed.</em></p>
+<h2 id="personal-rebuild-how-i-got-an-ai-to-build-it-and-to-write-the-prompts">Personal rebuild: how I got an AI to build it — and to write the prompts</h2>
+<p>I don’t know how to write a good brief for a coding agent. I know how to write a brief for a person: what it is for, what it must never do, what I will check. So that is what I wrote, once, to a planning session — an AI agent here being a large language model plus an orchestration layer such as Claude Code, running <a href="https://raywanh.substack.com/p/the-model-isnt-the-product-the-harness">my own harness of checks</a> — and asked it to produce everything the builders would read.</p>
+<p><img src="https://raw.githubusercontent.com/rushphoton/meet_agi/article-assets/substack-2026-10/image-9.png"></p>
+<p><em>Who prompted whom. One brief from me; the rules, the design document, the four agent briefs, the test hook and my own session scripts were all written by the planning session.</em></p>
+<p>It wrote the rest. The house rules. The design document with the frozen contract. A brief for each of three building lanes and one for a reviewer. A small hook that runs the test suite before any session is allowed to end its turn, and refuses to let it finish if it broke a test that was passing when it started. And the scripts for my own sessions — the exact text I would paste to start the build, the integrate step, the review. My typing for the whole project, after that first brief, was the keys into a file the agents never print from, “go,” “fix one by one,” and my feedback after the live test.</p>
+<p>The briefs are better than anything I would have written, because they were written for the reader they had. Two lines from the engine lane’s brief:</p>
+<blockquote>
+<p>You cannot ask anyone anything: when unsure, follow DESIGN.md’s “when unsure” rule — choose the simplest option, record it as an assumption, continue.</p>
+</blockquote>
+<blockquote>
+<p>If you need a contract change, do not make it: build against the contract as it is, record the change you needed, continue.</p>
+</blockquote>
+<p>And the reviewer’s whole job in one sentence:</p>
+<blockquote>
+<p>Read the branch you are given as a hostile reviewer whose job is to make it fail in front of [the audience the orchestrator names].</p>
+</blockquote>
+<p>I would not have thought to forbid questions. It is the single rule that let three builders run for hours with nobody watching, and every assumption they made under it came back to me as a list — lane, assumption, why, how to undo — so I could reverse the ones I disagreed with afterwards instead of being asked about them one at a time.</p>
+<h2 id="personal-rebuild-what-i-changed-and-why">Personal rebuild: what I changed, and why</h2>
+<p><strong>Vendors.</strong> The hackathon ran on Recall.ai for meeting access because the sponsors had it on tap. When I went to sign up on my own, Recall declined my personal Gmail. So the rebuild joins meetings through Attendee instead, with the Recall code kept behind the same seam for later. The Claude account had no credit, so every judgment, answer and summary runs on Gemini’s cheapest model — Flash-Lite — and the cost per 30-minute meeting comes out around US$0.19 on the paid tier. The Tenstorrent path that won us the inference track is gone: it was the right trade for a prize and the wrong one for a product. On the hackathon’s own numbers that path took about 9 seconds per answer, against roughly 1 to 2 on Gemini.</p>
+<p><strong>Process.</strong> This is the part that transfers, so it gets the diagram.</p>
+<p><img src="https://raw.githubusercontent.com/rushphoton/meet_agi/article-assets/substack-2026-10/image-5.png"></p>
+<p><em>How the rebuild ran. Seven steps, one command at the end of each.</em></p>
+<p>Three things made the no-reading rule survivable:</p>
+<ol type="1">
+<li><strong>Rules before code.</strong> A one-page file every agent reads first. Tests cover failure paths before happy paths. Anything canned must say so in its own output, so a placeholder can never pass as real on stage. Never print a key anywhere. Email me when blocked for more than five minutes. Eleven rules.</li>
+<li><strong>A frozen contract, then parallel lanes.</strong> One design document said what the product was and what it was not, and every data shape was defined once in the backend and generated for the dashboard. Only then did three AI sub-agents each take one lane: the engine that hears and judges, the meeting side that joins and speaks, the screens. Each built in its own copy of the repository against a scripted fake meeting, with nobody watching. A fourth session merged them. Zero text conflicts, because each lane only touched its own folders.</li>
+<li><strong>A hostile reviewer with a brief.</strong> Before anything touched a real call, a fresh reviewer agent was told its audience was “a live demo in front of an audience” and asked what would go wrong. It found 11 things. Two were P0: every call to the model was failing while the health light stayed green, and the whole API was reachable from the public internet through the tunnel. Both would have been found by the audience instead.</li>
+</ol>
+<p>The fake meeting deserves one more line. It is a 25-line scripted conversation with one planted dispute and one planted “Hey AGI.” Every lane had to pass it before merging, and <code>python scripts/verify.py</code> runs it last, after the tests, and prints <code>REPLAY OK</code> or doesn’t. That one command is the entire extent of my code review.</p>
+<p><img src="https://raw.githubusercontent.com/rushphoton/meet_agi/article-assets/substack-2026-10/image-8.png"></p>
+<p><em>The review screen after the fake meeting: summary, follow-ups you can tick off, and the alert with the exact line, speaker, confidence and source passage.</em></p>
+<h2 id="personal-rebuild-the-live-test-with-a-clock-on-it">Personal rebuild: the live test, with a clock on it</h2>
+<p>On September 27 I hosted a Google Meet from my personal account, admitted the bot from the waiting room, and read the fake script out loud. The design document had set latency targets before any code existed. Here is what the meeting file recorded.</p>
+<p><img src="https://raw.githubusercontent.com/rushphoton/meet_agi/article-assets/substack-2026-10/image-6.png"></p>
+<p><em>First real Google Meet, September 27: every measure inside the target set in the design document before any code existed.</em></p>
+<ul>
+<li><strong>Send bot → bot in the call (includes me clicking Admit)</strong> — target — · live 53 s · fine</li>
+<li><strong>“Revenue was rising” said → flag on the dashboard</strong> — target ≤ 8 s · live 3 s · pass</li>
+<li><strong>Same → flag posted in the Meet chat</strong> — target ≤ 8 s · live 5 s · pass</li>
+<li><strong>“Hey AGI, what was Q3 revenue…” → answer ready</strong> — target ≤ 10 s · live 3 s · pass</li>
+<li><strong>Same → answer typed in chat</strong> — target ≤ 10 s · live 5 s · pass</li>
+<li><strong>Same → voice playing in the room</strong> — target ≤ 10 s · live 7 s · pass</li>
+<li><strong>Answer content</strong> — target from the documents · live “Q3 revenue was 41.2 million dollars,” citing the deck · pass</li>
+<li><strong>Speaker name on every line</strong> — target every line · live yes · pass</li>
+</ul>
+<p>Every number inside target. And the session was still a mess, which is the useful part.</p>
+<h2 id="personal-rebuild-what-broke-because-thats-where-the-learning-was">Personal rebuild: what broke — because that’s where the learning was</h2>
+<p><img src="https://raw.githubusercontent.com/rushphoton/meet_agi/article-assets/substack-2026-10/image-7.png"></p>
+<p><em>Real caption lines from the three live tests. The bot never hears audio; it reads what Google Meet writes.</em></p>
+<ol type="1">
+<li><strong>The bot is deaf to me and can only read.</strong> It never hears audio; it reads Google Meet’s captions. When I said “Hey AGI,” the captions wrote “Hey GI,” “Hey Giant,” “Hey AJI,” “Hey Joe,” “Hey Jack,” and once “Hey Adrian.” Exact spellings missed all of them. The fix was two layers: more exact spellings, and a sounds-like check — “hey” plus a word that could be AGI is confirmed by one cheap model call. Real names never count, because a colleague called Ajay should not wake a bot every time someone greets him.</li>
+<li><strong>It heard its own voice.</strong> Its spoken answers came back through the captions as transcript, labeled “Meet AGI,” and went into the engine, which could have flagged or answered itself. Its own lines are now dropped before they reach the engine. Test name: <code>test_bot_hears_its_own_voice_in_meet_captions_and_feeds_it_back_to_the_engine</code>.</li>
+<li><strong>“Stop talking” needed its name said.</strong> The hackathon’s stop phrase was “AGI, stop talking.” In a real room, people shout “Stop! Stop talking!” and nothing else. Now a plain “stop talking” from anyone works — but only while the bot is speaking or just after, and a bare “stop” has to lead the sentence, so “Stop the recording, please” is left alone.</li>
+<li><strong>It stayed in the call, recording and billing.</strong> I closed the window with Ctrl+C instead of pressing End meeting. The bot sat in the empty Meet until the vendor timed it out, and no summary was written. The launcher now ends every open meeting on Ctrl+C and sweeps up anything a previous crash left behind.</li>
+<li><strong>It only flagged arguments between people.</strong> The dispute check was looking for disagreement between participants. I wanted it to chime in when one person contradicts or doubts themselves — “no, that can’t be right… maybe it is… no, it’s wrong” — which is how real meetings go off the rails. The prompts now list self-correction, hedging and flip-flops, and when the documents cannot settle it, the flag says so. Then it over-corrected: “about 19 cents, I think,” said while narrating a slide, is not doubt. Round two fixed that too.</li>
+<li><strong>The dashboard was broadcasting the transcript.</strong> Opened by the laptop’s network name instead of localhost, the live view showed errors — and, found while checking that, its relay passed the full transcript to anyone on the same Wi-Fi. It now listens only on the laptop itself.</li>
+<li><strong>The vendor can’t cut a playing clip.</strong> Attendee cannot stop audio mid-sentence. So answers are now synthesized and sent one sentence at a time, and “stop” drops the remaining sentences while the current one finishes. The first sentence starts about a second after the answer exists instead of five.</li>
+</ol>
+<p>One more thing from that session, which I didn’t plan and can’t improve on. At the end of the second live test I rambled my complaints into the meeting — the captions garble “AGI,” stop should work without the name, it should catch me contradicting myself. The bot’s own end-of-meeting summary came back with three follow-ups: <em>Review and fix AGI name recognition issues in the transcripts. Improve AI responsiveness to interruption commands like “stop talking.” Verify the accuracy of the Q3 revenue figure provided by the board deck.</em> It had minuted its own bug report.</p>
+<h2 id="what-this-cost-me-and-what-it-didnt">What this cost me, and what it didn’t</h2>
+<p>The podium came from a build that was tested live, repeatedly, through the day — by two people who had been in the code since morning, with the sponsors’ keys, and with nothing written down. The rebuild came from a rules file, a contract, 431 tests, two hostile reviews, three recorded meetings and one command. The second is slower to produce and it is the only one I can hand to someone else — or to myself in eight weeks.</p>
+<p>Two honest limits. First, the no-reading rule is a choice, not a virtue. A person who reads code would have caught the broadcast-to-Wi-Fi bug faster than a reviewer agent did. I run the constraint because it forces the whole process to produce checks I can run, which is the only kind of oversight I can offer on anything I build. Second, “one model, cheapest tier” is a budget decision, not a finding. The free tier of that model lets the vendor use what it hears to improve its products; before any real document goes through it, billing goes on. That is written in the needs-me list, where it will stay until I do it.</p>
+<h2 id="the-bottom-line">The bottom line</h2>
+<p>A hackathon proves a thing can exist. A rebuild — alone, with the teammate’s part of the knowledge gone — proves you understand it. The second is the one that compounds — into the next build, into every vendor conversation where someone says “it just works,” and into the question I now ask of any AI system I’m shown: what is the one command that proves it, and who wrote the tests named after what broke?</p>
+<p>What did I not do? I haven’t re-run the ten gate fixes in a live call. The webhook that delivers the transcript checks a token but not yet the vendor’s signature. Recall is still the vendor the design assumes, and I have not retried the sign-up. The cost per meeting is an estimate from token counts, not a bill. Those are the next four lines in <a href="https://github.com/rushphoton/meet_agi/blob/integrate/STATE.md">STATE.md</a>, which is where every session ends. The repository is public: <a href="https://github.com/rushphoton/meet_agi">github.com/rushphoton/meet_agi</a> — <code>python scripts/verify.py</code> is the one command.</p>
+<p>Coming next: the briefing documents I promised last time — the chips, the inference layer, the models, the applications — and why building this bot changed what I thought mattered in that stack.</p>
+<p>If you built something at a hackathon, do you still have it in your head? Could you rebuild it tomorrow, without the teammate?</p>
+<hr />
+<p><em>This describes a personal project built in personal time on personal accounts, against a one-page sample document with invented figures; no company systems, data, documents or meetings were involved. My teammate is named with his permission. Counts and timings are taken from the project’s own logs. Views are my own and not those of any company or employer, and nothing here is an endorsement of any product. If you’re an operator building your own tools — or wondering whether it’s worth the time — my inbox is open.</em></p>
