@@ -147,7 +147,7 @@ A **recorder** writes each meeting to one JSON file as it happens. The dashboard
 ### 3.4 Where it runs (demo)
 
 - The backend runs on Ray's laptop: `uvicorn` on port 8000.
-- Recall reaches it at `https://among-sanction-browsing.ngrok-free.dev` via `tools\ngrok.exe http 8000 --url=...`.
+- Recall reaches it at the static ngrok domain in `PUBLIC_BASE_URL` (`.env`) via `tools\ngrok.exe http 8000 --url=...`.
 - The dashboard runs on `http://localhost:3000` and calls `NEXT_PUBLIC_API_BASE=http://localhost:8000`.
 - There is one meeting at a time (see §10 default).
 

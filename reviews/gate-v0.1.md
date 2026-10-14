@@ -176,7 +176,7 @@
   3. If any of them differ, press **End meeting** on the dashboard if a meeting is open, then Ctrl+C in the go.py window.
   4. In PowerShell, run:
      ```
-     Rename-Item "C:\Users\YBBJ100572\Desktop\AI\Meet AGI\data\settings.json" settings.old.json
+     Rename-Item "$env:USERPROFILE\Desktop\AI\Meet AGI\data\settings.json" settings.old.json
      ```
   5. Run `python scripts/go.py` again and re-enter any speaker names in Settings.
 - **On stage:**

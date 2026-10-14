@@ -99,13 +99,13 @@ What went wrong, and what was done:
    - in Recall's dashboard, point the status webhook at `PUBLIC_BASE_URL/webhooks/recall/<your RECALL_WEBHOOK_TOKEN>`. This is optional, because the backend also checks the bot's status every 3 s.
 3. **Push** (this session did not push). Run in PowerShell:
    ```
-   git -C "C:\Users\YBBJ100572\Desktop\AI\Meet AGI" push origin main integrate
+   git -C "$env:USERPROFILE\Desktop\AI\Meet AGI" push origin main integrate
    ```
 4. **Decide whether the gate fixes go to `main`**, after a rehearsal. `main` is at 944c2bb, before the fixes.
 
 ## Test in a real Google Meet (Attendee)
 
-1. VPN on. In PowerShell: `cd "C:\Users\YBBJ100572\Desktop\AI\Meet AGI"`, then `python scripts/go.py`. Wait for `READY`; Chrome opens http://localhost:3000.
+1. VPN on. In PowerShell: `cd "$env:USERPROFILE\Desktop\AI\Meet AGI"`, then `python scripts/go.py`. Wait for `READY`; Chrome opens http://localhost:3000.
 2. In another Chrome tab, while signed in to your **personal** Google account, open https://meet.google.com, choose **New meeting → Start an instant meeting**, and copy the link from the address bar.
 3. On the dashboard, paste the link into **Send Meet AGI to a meeting** and click Send. The live view opens and shows "bot: joining".
 4. In Meet, within about 30 s an **"Ask to join"** prompt for "Meet AGI" appears. Click **Admit**. Attendee removes the bot if it waits 15 minutes.

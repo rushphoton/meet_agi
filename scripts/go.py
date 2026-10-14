@@ -197,7 +197,7 @@ def run_tunnel(public_url: str) -> None:
                 _stop_old_ngrok_on_this_laptop()
                 continue
             fail("The tunnel address is held by an ngrok running somewhere else (another computer or window).",
-                 "Open https://dashboard.ngrok.com/endpoints , find among-sanction-browsing.ngrok-free.dev, "
+                 f"Open https://dashboard.ngrok.com/endpoints , find {public_url}, "
                  "stop it (or shut the other computer's ngrok), then run this again.", log)
         fail("The public tunnel did not reach the backend.",
              "Check the VPN/internet, then copy the lines above into the Claude chat.", log)

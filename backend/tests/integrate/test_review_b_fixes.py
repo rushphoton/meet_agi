@@ -13,7 +13,7 @@ from backend.app.contract.events import MeetingEnded
 from backend.app.core.bus import EventBus
 from backend.app.core.store import Store
 
-TUNNEL = {"host": "among-sanction-browsing.ngrok-free.dev"}
+TUNNEL = {"host": "example-tunnel.ngrok-free.dev"}
 TOKEN = "t" * 64
 
 
@@ -25,7 +25,7 @@ def test_public_tunnel_can_read_transcripts_settings_and_dev_endpoints(client):
     assert client.get("/docs", headers=TUNNEL).status_code == 404
     assert client.get("/openapi.json", headers=TUNNEL).status_code == 404
     # a forwarded host counts too, even if Host itself looks local
-    fwd = {"host": "localhost:8000", "x-forwarded-host": "among-sanction-browsing.ngrok-free.dev"}
+    fwd = {"host": "localhost:8000", "x-forwarded-host": "example-tunnel.ngrok-free.dev"}
     assert client.get("/api/meetings", headers=fwd).status_code == 404
 
 

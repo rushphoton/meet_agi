@@ -1,15 +1,17 @@
 # Meet AGI
 
-Meet AGI will be a Google Meet copilot: a bot that joins your call, listens to the live transcript, answers out loud when someone says "Hey AGI" (searching your own documents first), quietly flags disagreements or shaky facts in the meeting chat with its reasoning, and hands you a summary with follow-ups when the call ends - all visible on a small web dashboard.
+Meet AGI is a Google Meet copilot: a bot that joins your call, listens to the live transcript, answers out loud when someone says "Hey AGI" (searching your own documents first), quietly flags disagreements or shaky facts in the meeting chat with its reasoning, and hands you a summary with follow-ups when the call ends - all visible on a small web dashboard.
 
-Start here: DESIGN.md, STATE.md
+**New here, or were you sent this repo to learn from it? Read [LEARN.md](LEARN.md) first.** It covers a 5-minute run with no keys, the architecture, a walk-through of one sentence through the code, and how it was built with AI agents.
+
+For the details behind it: DESIGN.md (decisions and data contract) and STATE.md (where things stand).
 
 ## Run it
 
-Open PowerShell in this folder first:
+Open PowerShell in this folder first (the path below is where it lives on the original laptop; use wherever you cloned it - on macOS/Linux use `python3` instead of `python`):
 
 ```
-cd "C:\Users\YBBJ100572\Desktop\AI\Meet AGI"
+cd "$env:USERPROFILE\Desktop\AI\Meet AGI"
 ```
 
 The first command you run creates a private Python environment (`.venv`) and installs what it needs. This takes about a minute once, then is instant.
